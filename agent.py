@@ -32,7 +32,7 @@ def build_system_prompt():
             f"{key}: {value['type'].__name__} ({'required' if value['required'] else 'optional'})"
             for key, value in spec["parameters"].items()) or "none"
         descriptions.append(f"- {name}: {spec['description']} Arguments: {arguments}. Permission: {spec['permission']}; confirmation: {needs_confirmation(spec)}.")
-    return """You are my_agent, an AI work assistant.
+    return """You are Athena, an AI work assistant.
 Help complete useful work: summarize, compare, analyze, draft, and support decisions.
 Distinguish facts from analysis; explain important tradeoffs and the basis of recommendations.
 Drafting or preparing content is not permission to send or execute it.
@@ -310,7 +310,7 @@ def _run_agent(task, provider, run, conversation, confirmation):
 
 def main():
     global model_provider
-    print(f"my_agent v{VERSION}")
+    print(f"Athena v{VERSION}")
     if model_provider is None:
         try:
             model_provider = get_model_provider()
@@ -339,7 +339,7 @@ def main():
                   "/good - Rate the last task positively\n"
                   "/bad - Rate the last task negatively\n"
                   "/neutral - Rate the last task neutrally\n"
-                  "exit - Exit my_agent\n")
+                  "exit - Exit Athena\n")
             continue
         if command == "/tools":
             print("Available tools:")
@@ -350,6 +350,7 @@ def main():
             continue
         if command == "/status":
             print(redact_secrets(
+                f"Athena v{VERSION}\n"
                 f"Version: {VERSION}\n"
                 f"Provider: {getattr(model_provider, 'provider_name', 'custom')}\n"
                 f"Model: {getattr(model_provider, 'model_name', 'custom')}\n"
@@ -378,7 +379,7 @@ def main():
 
         result = run_agent(user_input, conversation=session, confirmation=cli_confirm)
 
-        print(f"\nAgent > {result}\n")
+        print(f"\nAthena > {result}\n")
 
 
 if __name__ == "__main__":

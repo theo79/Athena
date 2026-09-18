@@ -117,7 +117,7 @@ def test_startup_visibility(monkeypatch, capsys):
     monkeypatch.setattr('builtins.input', lambda prompt: 'exit')
     agent.main()
     output = capsys.readouterr().out
-    assert output == 'my_agent v0.11\nReady.\n\n'
+    assert output == 'Athena v0.11\nReady.\n\n'
     assert 'API_KEY' not in output
 
 

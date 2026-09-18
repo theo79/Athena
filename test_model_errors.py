@@ -72,8 +72,8 @@ def test_interactive_loop_continues(monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", user_input)
     agent.main()
     output = capsys.readouterr().out
-    assert "Agent > Model provider rate limit reached." in output
-    assert "Agent > Second task succeeded" in output
+    assert "Athena > Model provider rate limit reached." in output
+    assert "Athena > Second task succeeded" in output
     assert prompts == ["You > "] * 3
     assert create.call_count == 2
     assert SECRET not in output

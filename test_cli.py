@@ -45,7 +45,7 @@ def test_clean_chat_transcript(monkeypatch, capsys):
     monkeypatch.setattr('builtins.input', lambda prompt: next(inputs))
     agent.main()
     assert capsys.readouterr().out == (
-        'my_agent v0.11\nReady.\n\n\nAgent > A model-generated greeting.\n\n')
+        'Athena v0.11\nReady.\n\n\nAthena > A model-generated greeting.\n\n')
     assert len(provider.requests) == 1
 
 
@@ -63,7 +63,7 @@ def test_help_status_are_local(monkeypatch, capsys, debug):
     def read_input(prompt):
         command = next(inputs)
         if command == '/help':
-            assert capsys.readouterr().out == 'my_agent v0.11\nReady.\n\n'
+            assert capsys.readouterr().out == 'Athena v0.11\nReady.\n\n'
         return command
 
     monkeypatch.setattr('builtins.input', read_input)
@@ -71,8 +71,9 @@ def test_help_status_are_local(monkeypatch, capsys, debug):
     output = capsys.readouterr().out
     for command in ('/help', '/status', '/history', '/clear', '/good', '/bad', '/neutral', 'exit'):
         assert command in output
-    assert ('Version: 0.11\nProvider: openrouter\nModel: openrouter/free\n'
+    assert ('Athena v0.11\nVersion: 0.11\nProvider: openrouter\nModel: openrouter/free\n'
             f'Debug: {str(debug).lower()}') in output
+    assert 'exit - Exit Athena' in output
     assert not provider.requests and not session.recent_messages()
     assert not experience.EXPERIENCES_FILE.exists()
 
@@ -93,7 +94,7 @@ def test_debug_environment(value, expected):
 
 def test_identity_and_internal_protocol():
     prompt = agent.build_system_prompt()
-    assert 'You are my_agent, an AI work assistant.' in prompt
+    assert 'You are Athena, an AI work assistant.' in prompt
     assert 'Theocharis is the user/developer, not your name.' in prompt
     assert 'In user-facing answers' in prompt
     assert 'Always respond with one JSON object:' in prompt

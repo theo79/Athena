@@ -1,4 +1,4 @@
-# my_agent v0.10 — Experience Intelligence
+# Athena v0.10 — Experience Intelligence
 
 See [README.md](README.md) for work assistant tools and confirmation.
 
