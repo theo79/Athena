@@ -1,4 +1,19 @@
-# my_agent v0.11 — Work Assistant Foundations
+# my_agent
+
+A local-first AI work assistant built in Python.
+
+my_agent combines LLM reasoning with tools, persistent memory,
+experience retrieval, feedback, and permission-controlled actions.
+
+## What it can do
+
+- Answer, summarize, compare, and draft
+- Read local documents
+- Search the web
+- Remember user-approved information
+- Learn from past task outcomes and feedback
+- Use tools through an explicit permission layer
+- Support OpenRouter and Google Gemini
 
 my_agent is evolving into an AI work assistant. This release supports reading,
 searching, summarizing, comparing, drafting and decision support with a bounded
@@ -151,3 +166,6 @@ document formats/chunks/limits and summary/approval workflows. Existing tests
 continue to cover providers, quiet/debug output, persistent memory, experience,
 feedback, retrieval quality and storage recovery. These tests do not measure live
 LLM answer quality or make live provider calls.
+## Current release
+
+v0.11 — Work Assistant Foundations
