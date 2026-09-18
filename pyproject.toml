@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 dynamic = ["dependencies"]
 
 [project.optional-dependencies]
-dev = ["pytest", "httpx2"]
+dev = ["pytest", "httpx"]
 
 [tool.setuptools]
 py-modules = ["agent", "conversation", "diagnostics", "experience", "json_storage", "models", "search_provider", "tools"]
