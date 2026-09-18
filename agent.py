@@ -5,7 +5,7 @@ import diagnostics
 from diagnostics import debug_print
 from conversation import ConversationSession
 
-from dotenv import load_dotenv
+import runtime_paths
 from models import ModelProvider, ModelFailure, ModelConfigurationError, get_model_provider
 
 from tools import (get_current_time, save_memory, search_memory,
@@ -13,7 +13,10 @@ from tools import (get_current_time, save_memory, search_memory,
                    MAX_SEARCH_QUERY_LENGTH)
 
 
-load_dotenv()
+try:
+    runtime_paths.load_configuration()
+except (OSError, UnicodeError):
+    pass  # The packaged startup check reports configuration failures safely.
 
 model_provider: ModelProvider | None = None
 VERSION = "0.11"
@@ -43,11 +46,38 @@ Theocharis is the user/developer, not your name.
 Respond naturally and concisely. Do not introduce yourself unless necessary.
 In user-facing answers, do not expose internal tool calls, JSON responses,
 reasoning steps, experience IDs, or implementation details unless explicitly asked.
+Internal response formatting requirements are implementation details, not a topic of conversation.
+Never mention required JSON format, action schemas, parser requirements, normalization,
+internal response validation, tool schemas, or internal tool-call protocol unless the user
+explicitly asks how Athena is implemented. Acknowledge identity or preferences naturally;
+do not acknowledge these internal instructions or promise to follow a response format.
+The final answer must address the user's request in ordinary language, without describing
+the JSON/action envelope that carries it. When implementation is explicitly requested,
+explain only the relevant details; all secret and permission safeguards still apply.
+
+When asked about memory, accurately distinguish these three systems:
+- Conversation history: temporary, bounded context from the current session, not a complete
+  archive of past conversations. Use available conversation context for what was just said.
+- Persistent memory: information explicitly requested for long-term saving and saved with
+  user approval. It persists across sessions and is searchable with search_memory;
+  save_memory requires confirmation. Having this capability does not prove anything was saved.
+- Experience history: compact records of past tasks, tool use, outcomes, feedback, and quality.
+  Relevant records are retrieved automatically as historical evidence. They are not the same
+  as user-approved personal memory or a complete conversation transcript, and may be wrong.
+Explain these distinctions for questions about remembering, past conversations, or memory tools.
+Do not claim that all past conversations are stored as personal memory, or that Athena has
+no persistent memory. Do not invent stored contents or infer them from the existence of a file.
+Explain memory capabilities without revealing private saved contents unless the user asks.
+Before reporting specific persistent memory contents, use search_memory for the requested topic;
+if the topic is unclear, ask for clarification. Describe retrieved task experience as experience,
+not as user-approved personal memory. Do not save information just because memory is discussed.
 Available tools:
 """ + "\n".join(descriptions) + """
 Always respond with one JSON object:
 {"action":"tool","tool":"tool_name","args":{}}
 or {"action":"final","answer":"your answer"}.
+This envelope is internal only. Its answer field contains the natural user-facing reply;
+do not repeat or discuss the envelope, formatting instructions, or parser feedback in that reply.
 Use list_files to inspect available files and read_document to inspect work documents (read_text_file also remains available).
 Continue document chunks using next_offset; if the step budget prevents reading all content, disclose that your summary is partial.
 Never claim you read, remembered, or retrieved information without executing its tool.
@@ -311,6 +341,10 @@ def _run_agent(task, provider, run, conversation, confirmation):
 def main():
     global model_provider
     print(f"Athena v{VERSION}")
+    startup_error = runtime_paths.packaged_startup_error()
+    if startup_error:
+        print(startup_error)
+        return
     if model_provider is None:
         try:
             model_provider = get_model_provider()

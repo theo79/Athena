@@ -2,9 +2,10 @@
 from pathlib import Path
 from datetime import datetime
 import search_provider
+from runtime_paths import memory_path, application_dir
 
-MEMORY_FILE = Path(__file__).resolve().with_name("memory.json")
-WORKSPACE_ROOT = Path(__file__).resolve().parent
+MEMORY_FILE = memory_path()
+WORKSPACE_ROOT = application_dir()
 MAX_TEXT_BYTES = 100 * 1024
 IGNORED_DIRECTORIES = {".venv", "__pycache__", ".git", ".pytest_cache"}
 MAX_SEARCH_QUERY_LENGTH = 500

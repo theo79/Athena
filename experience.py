@@ -9,8 +9,9 @@ from uuid import uuid4
 from tools import redact_secrets
 from diagnostics import debug_print
 from json_storage import load_list, write_list
+from runtime_paths import experience_path
 
-EXPERIENCES_FILE = Path(__file__).resolve().with_name("experiences.json")
+EXPERIENCES_FILE = experience_path()
 MAX_ANSWER_CHARS = 5000
 MAX_RETRIEVED_EXPERIENCES = 3
 MIN_RELEVANCE = 0.45

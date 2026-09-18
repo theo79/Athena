@@ -1,0 +1,42 @@
+[
+  {
+    "id": "f3b994fd-7014-4cbc-8474-dd589f9f6898",
+    "timestamp": "2026-09-18T16:43:38.796329+00:00",
+    "task": "hey",
+    "provider": "openrouter",
+    "model": "openrouter/free",
+    "steps": 1,
+    "parse_failures": 0,
+    "tools_used": [],
+    "status": "model_failure",
+    "final_answer": "Model provider authentication failed. OPENROUTER_API_KEY is not configured.",
+    "error_type": "model_provider_error",
+    "error_message": "Model provider authentication failed. OPENROUTER_API_KEY is not configured.",
+    "budget_exhausted": false,
+    "feedback": null,
+    "reward": 0,
+    "quality": "unverified",
+    "lesson": null,
+    "lesson_status": null
+  },
+  {
+    "id": "0aacb692-0634-4a6e-8478-602308975fdc",
+    "timestamp": "2026-09-18T16:44:18.833558+00:00",
+    "task": "clear",
+    "provider": "openrouter",
+    "model": "openrouter/free",
+    "steps": 1,
+    "parse_failures": 0,
+    "tools_used": [],
+    "status": "model_failure",
+    "final_answer": "Model provider authentication failed. OPENROUTER_API_KEY is not configured.",
+    "error_type": "model_provider_error",
+    "error_message": "Model provider authentication failed. OPENROUTER_API_KEY is not configured.",
+    "budget_exhausted": false,
+    "feedback": null,
+    "reward": 0,
+    "quality": "unverified",
+    "lesson": null,
+    "lesson_status": null
+  }
+]
