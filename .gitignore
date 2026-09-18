@@ -1,0 +1,40 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+experiences.json
+experiences.json.tmp
+experiences.json.*
+memory.json
+memory.json.*
+
+# Additional secrets
+.env.*
+!.env.example
+
+# Virtual environments
+venv/
+
+# Runtime backups and recovery data
+*.bak
+*.corrupt
+*.quarantine
+
+# Python build/cache artifacts
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Temporary development/test folders
+pytest-cache-files-*/
+.v09-test-temp/
+.v010-*/
+.v011-*/
+.report-test-temp/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

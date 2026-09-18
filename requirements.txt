@@ -1,0 +1,4 @@
+openai
+python-dotenv
+google-genai==2.24.0
+httpx

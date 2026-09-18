@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "my_agent"
+version = "0.11"
+description = "A local AI work assistant with explicit tool permissions"
+readme = "README.md"
+requires-python = ">=3.10"
+dynamic = ["dependencies"]
+
+[project.optional-dependencies]
+dev = ["pytest", "httpx2"]
+
+[tool.setuptools]
+py-modules = ["agent", "conversation", "diagnostics", "experience", "json_storage", "models", "search_provider", "tools"]
+packages = ["tool_modules"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+python_files = ["test_*.py"]
