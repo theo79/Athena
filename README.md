@@ -1,5 +1,6 @@
 # Athena
 
+![Athena](athena.png)
 **Athena is a local-first AI work assistant built in Python.**
 
 Athena combines LLM reasoning with tools, persistent memory, experience retrieval, feedback, and permission-controlled actions.
