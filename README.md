@@ -22,11 +22,9 @@ your chosen provider's key and may count toward its API usage or billing.
 
 ### Windows
 
-Download the latest Windows release from the GitHub Releases page:
+[**Download Athena v0.12 for Windows**](https://github.com/theo79/Athena/releases/tag/v0.12)
 
-**Athena v0.12 — Windows**
-
-Extract `Athena-v0.12-windows.zip` and run `Athena.exe`.
+Download `Athena-v0.12-windows.zip`, extract it, and run `Athena.exe`.
 
 Python is not required for the Windows executable.
 
