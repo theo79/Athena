@@ -1,5 +1,16 @@
-# Athena
-**Current release: v0.12**
+<p align="center">
+  <img src="athena-icon.png" alt="Athena" width="64">
+</p>
+
+<h1 align="center">Athena</h1>
+
+<p align="center">
+  <strong>Current release: v0.12</strong>
+</p>
+
+Athena is a local-first AI work assistant for reading local documents, remembering
+approved preferences, searching the web when enabled, and helping summarize,
+compare, analyze and draft.
 
 Athena is a local-first AI work assistant for reading local documents, remembering
 approved preferences, searching the web when enabled, and helping summarize,
