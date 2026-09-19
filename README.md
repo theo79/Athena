@@ -58,11 +58,6 @@ python -m pip install -r requirements.txt
 python agent.py
 ```
 
-### Windows executable
-
-Extract the complete Windows ZIP, open a terminal in its folder, and run
-`.\Athena.exe`. Python is not required. See [WINDOWS_README.md](WINDOWS_README.md)
-for storage and configuration details; [BUILD.md](BUILD.md) explains packaging.
 
 ### First run
 
