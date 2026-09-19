@@ -1,4 +1,5 @@
-# Athena v0.12
+# Athena
+**Current release: v0.12**
 
 Athena is a local-first AI work assistant for reading local documents, remembering
 approved preferences, searching the web when enabled, and helping summarize,
@@ -16,6 +17,18 @@ cloud provider sends the task and relevant context to that provider.
 You do not need both cloud providers or multiple API keys. No separate search
 service account is needed. Web search defaults to disabled; cloud searches reuse
 your chosen provider's key and may count toward its API usage or billing.
+
+## Download
+
+### Windows
+
+Download the latest Windows release from the GitHub Releases page:
+
+**Athena v0.12 — Windows**
+
+Extract `Athena-v0.12-windows.zip` and run `Athena.exe`.
+
+Python is not required for the Windows executable.
 
 ## Start Athena
 
