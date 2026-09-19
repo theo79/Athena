@@ -1,0 +1,55 @@
+# Private configuration (the example is public)
+.env
+<<<<<<< HEAD
+.venv/
+__pycache__/
+.pytest_cache/
+experiences.json
+experiences.json.tmp
+experiences.json.*
+memory.json
+memory.json.*
+.v011-private-config/
+
+# Additional secrets
+=======
+>>>>>>> 7a14887 (Release Athena v0.12 with Ollama and native web search)
+.env.*
+!.env.example
+config.json
+.v011-private-config/
+
+# Runtime records and recovery data
+memory.json
+memory.json.*
+experiences.json
+experiences.json.*
+*.bak
+*.corrupt
+*.quarantine
+
+# Local Python environments and generated metadata
+.venv/
+venv/
+.venv-build/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.egg-info/
+
+# Build and release output
+build/
+dist/
+Athena-v*-windows.zip
+
+# Known test and development scratch directories
+pytest-cache-files-*/
+.v09-test-temp/
+.v011-rename-temp/
+.report-test-temp/
+
+# Editor and operating-system local files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

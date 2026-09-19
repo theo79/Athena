@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "athena-ai-assistant"
+<<<<<<< HEAD
+version = "0.11"
+=======
+version = "0.12"
+>>>>>>> 7a14887 (Release Athena v0.12 with Ollama and native web search)
+description = "Athena, a local AI work assistant with explicit tool permissions"
+readme = "README.md"
+requires-python = ">=3.12"
+dynamic = ["dependencies"]
+
+[project.optional-dependencies]
+<<<<<<< HEAD
+dev = ["pytest", "httpx"]
+build = ["pyinstaller==6.22.0"]
+
+[tool.setuptools]
+py-modules = ["agent", "conversation", "diagnostics", "experience", "json_storage", "models", "runtime_paths", "search_provider", "tools"]
+=======
+dev = ["pytest"]
+build = ["pyinstaller==6.22.0"]
+
+[tool.setuptools]
+py-modules = ["agent", "conversation", "diagnostics", "experience", "json_storage", "models", "runtime_paths", "search_provider", "settings", "tools"]
+>>>>>>> 7a14887 (Release Athena v0.12 with Ollama and native web search)
+packages = ["tool_modules"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+python_files = ["test_*.py"]
