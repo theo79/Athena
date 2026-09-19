@@ -1,73 +1,11 @@
-<<<<<<< HEAD
-"""Replaceable model infrastructure; no agent or tool orchestration lives here."""
-import os
-from dataclasses import dataclass
-=======
 """Replaceable model infrastructure; no agent or tool orchestration lives here."""
 import os
 import re
 from dataclasses import dataclass
->>>>>>> 7a14887 (Release Athena v0.12 with Ollama and native web search)
 from typing import Protocol
 import httpx
 from google import genai
 from google.genai import errors, types
-<<<<<<< HEAD
-
-from openai import (OpenAI, RateLimitError, AuthenticationError,
-                    APIConnectionError, APITimeoutError, APIStatusError)
-
-
-@dataclass(frozen=True)
-class ModelFailure:
-    """Safe message kept separate from model text and parser failures."""
-    message: str
-
-
-class ModelProvider(Protocol):
-    def generate(self, messages: list[dict]) -> str | None | ModelFailure:
-        ...
-
-
-class ModelConfigurationError(ValueError):
-    """Invalid provider selection; never silently fall back."""
-
-
-class OpenRouterProvider:
-    provider_name = "openrouter"
-
-    def __init__(self, model_name="openrouter/free"):
-        self.model_name = model_name
-        self.client = None
-
-    def generate(self, messages):
-        if self.client is None:
-            api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
-            if not api_key:
-                return ModelFailure("Model provider authentication failed. OPENROUTER_API_KEY is not configured.")
-            self.client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key,
-                                 max_retries=0)
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=messages
-            )
-        except RateLimitError:
-            return ModelFailure("Model provider rate limit reached. Try again after the "
-                                "provider reset or configure another model/provider.")
-        except AuthenticationError:
-            return ModelFailure("Model provider authentication failed. Check the configured API key.")
-        except APITimeoutError:  # A subclass of APIConnectionError: handle it first.
-            return ModelFailure("Model provider request timed out.")
-        except APIConnectionError:
-            return ModelFailure("Could not connect to the model provider.")
-        except APIStatusError as exc:
-            return ModelFailure(f"Model provider returned an API error: {exc.status_code}")
-
-        return response.choices[0].message.content
-
-
-=======
 from settings import DEFAULT_MODELS, model_name, ollama_base_url
 
 from openai import (OpenAI, RateLimitError, AuthenticationError,
@@ -123,7 +61,6 @@ class OpenRouterProvider:
         return response.choices[0].message.content
 
 
->>>>>>> 7a14887 (Release Athena v0.12 with Ollama and native web search)
 class GeminiProvider:
     provider_name = "gemini"
 

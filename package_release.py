@@ -6,18 +6,11 @@ import shutil
 import zipfile
 
 from dotenv import dotenv_values
-<<<<<<< HEAD
-
-ROOT = Path(__file__).resolve().parent
-ALLOWED = {"Athena.exe", ".env.example", "README.md", "LICENSE"}
-KEY_PATTERN = re.compile(rb"\b(?:sk-(?:or-v1-)?[A-Za-z0-9_-]{24,}|AIza[A-Za-z0-9_-]{30,}|gh[pousr]_[A-Za-z0-9_]{30,})")
-=======
 import runtime_paths
 
 ROOT = Path(__file__).resolve().parent
 ALLOWED = {"Athena.exe", ".env.example", "README.md", "LICENSE"}
 KEY_PATTERN = re.compile(rb"\b(?:sk-(?:or-v1-)?[A-Za-z0-9_-]{24,}|AIza[A-Za-z0-9_-]{30,}|tvly-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{30,})")
->>>>>>> 7a14887 (Release Athena v0.12 with Ollama and native web search)
 
 
 def check_content(raw, known_secrets):
@@ -27,11 +20,7 @@ def check_content(raw, known_secrets):
 
 def forbidden_name(name):
     parts = name.replace("\\", "/").lower().split("/")
-<<<<<<< HEAD
-    return any(part == ".env" or part.startswith(("memory.json", "experiences.json"))
-=======
     return any(part in (".env", "config.json") or part.startswith(("memory.json", "experiences.json"))
->>>>>>> 7a14887 (Release Athena v0.12 with Ollama and native web search)
                or part.endswith((".bak", ".corrupt", ".quarantine")) for part in parts)
 
 
@@ -64,11 +53,6 @@ def main():
     values = dict(os.environ)
     if (ROOT / ".env").is_file():
         values.update(dotenv_values(ROOT / ".env"))
-<<<<<<< HEAD
-    secrets = [value.encode() for name, value in values.items()
-               if re.search(r"API_KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL", name, re.I)
-               and value and len(value) >= 16]
-=======
     # Include private legacy backups and the new user key store in in-memory
     # comparisons. Never copy these files or reveal their contents.
     private_files = list((ROOT / ".v011-private-config").glob("**/*"))
@@ -83,7 +67,6 @@ def main():
                if re.search(r"API_KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL", name, re.I)
                and value and len(value) >= 16]
     secrets.extend(value.encode() for value in private_values)
->>>>>>> 7a14887 (Release Athena v0.12 with Ollama and native web search)
     template = dotenv_values(ROOT / ".env.example")
     if any(value for name, value in template.items()
            if re.search(r"KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL", name, re.I)):
@@ -98,12 +81,6 @@ def main():
                          (ROOT / "WINDOWS_README.md", "README.md"), (ROOT / "LICENSE", "LICENSE")):
         check_content(source.read_bytes(), secrets)
         shutil.copyfile(source, release / name)
-<<<<<<< HEAD
-    archive_path = ROOT / "dist" / "Athena-v0.11-windows.zip"
-    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
-        for name in sorted(ALLOWED):
-            archive.write(release / name, "Athena-release/" + name)
-=======
     archive_path = ROOT / "dist" / "Athena-v0.12-windows.zip"
     with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
         for name in sorted(ALLOWED):
@@ -113,7 +90,6 @@ def main():
             raise ValueError("Unexpected ZIP contents; release aborted.")
         for name in archive.namelist():
             check_content(archive.read(name), secrets)
->>>>>>> 7a14887 (Release Athena v0.12 with Ollama and native web search)
     print(f"Release verified: {count} archive entries scanned; no likely credentials or runtime stores found.")
     print(f"Executable: {release / 'Athena.exe'}")
     print(f"ZIP: {archive_path}")
