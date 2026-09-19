@@ -1,19 +1,5 @@
 # Private configuration (the example is public)
 .env
-<<<<<<< HEAD
-.venv/
-__pycache__/
-.pytest_cache/
-experiences.json
-experiences.json.tmp
-experiences.json.*
-memory.json
-memory.json.*
-.v011-private-config/
-
-# Additional secrets
-=======
->>>>>>> 7a14887 (Release Athena v0.12 with Ollama and native web search)
 .env.*
 !.env.example
 config.json
