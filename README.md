@@ -178,6 +178,13 @@ is explicit process environment, saved JSON preferences, user-folder `.env`, the
 adjacent `.env`. Web-setting commands apply immediately and save preferences;
 explicit environment variables take precedence again after restart.
 
+## Runtime architecture
+
+The supported CLI remains `python agent.py`. Python hosts can use
+`agent_runtime.AgentRuntime` for synchronous tasks. See [ARCHITECTURE.md](ARCHITECTURE.md)
+for provider injection, session ownership, registry snapshots, confirmations,
+experience services, and the remaining shared-state and single-writer limits.
+
 ## Development and tests
 
 ```sh

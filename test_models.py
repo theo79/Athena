@@ -10,7 +10,7 @@ import agent
 import models
 from test_model_errors import status_error, successful_response
 from openai import RateLimitError, APITimeoutError
-import httpx2
+import httpx
 
 
 @pytest.fixture(autouse=True)
@@ -66,7 +66,7 @@ def test_missing_key(monkeypatch, key):
 
 @pytest.mark.parametrize('error,expected', [
     (status_error(RateLimitError, 429), 'rate limit'),
-    (APITimeoutError(request=httpx2.Request('POST', 'https://example.test')), 'timed out'),
+    (APITimeoutError(request=httpx.Request('POST', 'https://example.test')), 'timed out'),
 ])
 def test_provider_failure(error, expected):
     provider = models.OpenRouterProvider()

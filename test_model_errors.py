@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-import httpx2
+import httpx
 import pytest
 from openai import (RateLimitError, AuthenticationError, APIConnectionError,
                     APITimeoutError, APIStatusError)
@@ -15,9 +15,9 @@ SECRET = "sensitive-provider-payload"
 
 
 def status_error(cls, code):
-    request = httpx2.Request("POST", "https://example.test/chat",
+    request = httpx.Request("POST", "https://example.test/chat",
                             headers={"Authorization": f"Bearer {SECRET}"})
-    response = httpx2.Response(code, request=request,
+    response = httpx.Response(code, request=request,
                                headers={"retry-after": SECRET})
     return cls(SECRET, response=response, body={"error": SECRET})
 
@@ -34,9 +34,9 @@ def fake_client(monkeypatch, effects):
 @pytest.mark.parametrize("error,expected", [
     (status_error(RateLimitError, 429), "Model provider rate limit reached."),
     (status_error(AuthenticationError, 401), "Model provider authentication failed."),
-    (APIConnectionError(message=SECRET, request=httpx2.Request("POST", "https://example.test")),
+    (APIConnectionError(message=SECRET, request=httpx.Request("POST", "https://example.test")),
      "Could not connect to the model provider."),
-    (APITimeoutError(request=httpx2.Request("POST", "https://example.test")),
+    (APITimeoutError(request=httpx.Request("POST", "https://example.test")),
      "Model provider request timed out."),
     (status_error(APIStatusError, 503), "Model provider returned an API error: 503"),
 ])
