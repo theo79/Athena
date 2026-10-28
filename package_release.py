@@ -14,6 +14,11 @@ KEY_PATTERN = re.compile(rb"\b(?:sk-(?:or-v1-)?[A-Za-z0-9_-]{24,}|AIza[A-Za-z0-9
 
 
 def check_content(raw, known_secrets):
+    # Reject SQLite files even if renamed before being bundled as project data.
+    headers = (b"SQLite format 3\x00", b"\x37\x7f\x06\x82", b"\x37\x7f\x06\x83",
+               b"\xd9\xd5\x05\xf9\x20\xa1\x63\xd7")
+    if raw.startswith(headers):
+        raise ValueError("SQLite runtime data found; release aborted.")
     if KEY_PATTERN.search(raw) or any(secret in raw for secret in known_secrets):
         raise ValueError("Potential credential detected; release aborted (values withheld).")
 
@@ -21,7 +26,9 @@ def check_content(raw, known_secrets):
 def forbidden_name(name):
     parts = name.replace("\\", "/").lower().split("/")
     return any(part in (".env", "config.json") or part.startswith(("memory.json", "experiences.json"))
-               or part.endswith((".bak", ".corrupt", ".quarantine")) for part in parts)
+               or part.endswith((".bak", ".corrupt", ".quarantine"))
+               or re.search(r"\.(?:db|sqlite\d*|sql|dump|backup|export)(?:$|[.-])", part)
+               for part in parts)
 
 
 def audit_executable(path, known_secrets):

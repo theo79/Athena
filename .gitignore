@@ -14,6 +14,14 @@ experiences.json.*
 *.corrupt
 *.quarantine
 
+# SQLite stores, recovery sidecars, backups and exports (private data)
+*.[dD][bB]*
+*.[sS][qQ][lL][iI][tT][eE]*
+*.[sS][qQ][lL]*
+*.[dD][uU][mM][pP]*
+*.[bB][aA][cC][kK][uU][pP]*
+*.[eE][xX][pP][oO][rR][tT]*
+
 # Local Python environments and generated metadata
 .venv/
 venv/
