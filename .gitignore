@@ -47,3 +47,9 @@ pytest-cache-files-*/
 .idea/
 .DS_Store
 Thumbs.db
+# Additional local diagnostics and test/build output
+*.log
+.coverage
+.coverage.*
+htmlcov/
+.tox/

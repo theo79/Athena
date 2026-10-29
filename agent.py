@@ -104,9 +104,16 @@ def main():
             break
         feedback_commands = {"/good": "positive", "/bad": "negative", "/neutral": "neutral"}
         command = user_input.strip().lower()
+        if command == "/config provider":
+            from provider_cli import configure_provider
+            selected = configure_provider()
+            if selected is not None:
+                model_provider = selected
+            continue
         if command == "/help":
             print("Commands:\n"
                   "/help - Show available commands\n"
+                  "/config provider - Test and change AI provider\n"
                   "/status - Show runtime information\n"
                   "/settings [web on|web off] - Inspect settings or change web access\n"
                   "/tools - Show tools and permissions\n"

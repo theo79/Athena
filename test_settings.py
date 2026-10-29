@@ -6,33 +6,44 @@ import pytest
 import agent
 import runtime_paths
 import settings
+from types import SimpleNamespace
+from unittest.mock import Mock
+from provider_configuration import ProviderConfigurationService
 
 
 @pytest.fixture(autouse=True)
 def isolated_settings(tmp_path, monkeypatch):
     monkeypatch.setenv('LOCALAPPDATA', str(tmp_path))
     monkeypatch.setattr(runtime_paths, 'config_path', lambda: tmp_path / 'legacy.env')
-    for key in ('MODEL_PROVIDER', 'MODEL_NAME', 'WEB_SEARCH_ENABLED', 'OPENROUTER_API_KEY', 'GEMINI_API_KEY'):
-        monkeypatch.delenv(key, raising=False)
+    for key in ('MODEL_PROVIDER', 'MODEL_NAME', 'MODEL_CREDENTIAL_ENV', 'WEB_SEARCH_ENABLED', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'GEMINI_API_KEY'):
+        monkeypatch.setenv(key, '')
+        monkeypatch.delenv(key)
 
 
-@pytest.mark.parametrize('choice,provider', [('1', 'openrouter'), ('2', 'gemini')])
-@pytest.mark.parametrize('web,enabled', [('1', True), ('2', False)])
-def test_first_run(monkeypatch, capsys, choice, provider, web, enabled):
-    answers = iter([choice, web])
+@pytest.mark.parametrize('choice,provider', [('3', 'openrouter'), ('2', 'gemini'), ('1', 'openai')])
+@pytest.mark.parametrize('enabled', [True, False])
+def test_first_run(monkeypatch, capsys, choice, provider, enabled):
+    monkeypatch.setenv('WEB_SEARCH_ENABLED', str(enabled).lower())
+    settings.preferences_path().parent.mkdir(parents=True)
+    settings.preferences_path().write_text(json.dumps({'web_search_enabled':enabled}))
+    answers = iter(['2', choice, '1', '', 'chosen-model', '1'])
     monkeypatch.setattr('builtins.input', lambda _: next(answers))
     monkeypatch.setattr(settings.getpass, 'getpass', lambda _: 'offline-secret-value')
+    provider_instance=SimpleNamespace(generate=Mock(return_value='{"action":"final","answer":"ok"}'))
+    monkeypatch.setattr(ProviderConfigurationService, 'create_provider', lambda *a, **k: provider_instance)
     assert settings.ensure_configuration()
-    data = json.loads(settings.preferences_path().read_text())
-    assert data == {'model_provider': provider, 'model_name': settings.DEFAULT_MODELS[provider], 'web_search_enabled': enabled}
-    assert 'offline-secret-value' not in settings.preferences_path().read_text()
-    assert 'offline-secret-value' not in capsys.readouterr().out
-    assert settings.valid_configuration() and settings.web_enabled() == enabled
-    for key in ('MODEL_PROVIDER', 'MODEL_NAME', 'WEB_SEARCH_ENABLED', 'OPENROUTER_API_KEY', 'GEMINI_API_KEY'):
-        monkeypatch.delenv(key, raising=False)
+    data=json.loads(settings.preferences_path().read_text())
+    assert data['model_provider']==provider and data['model_name']=='chosen-model'
+    assert data['web_search_enabled'] is enabled
+    assert data['credential_env']==settings.KEY_NAMES[provider]
+    assert 'offline-secret-value' not in settings.preferences_path().read_text()+capsys.readouterr().out
+    assert not (runtime_paths.user_config_dir()/'.env').exists()
+    for key in ('MODEL_PROVIDER','MODEL_NAME','MODEL_CREDENTIAL_ENV',settings.KEY_NAMES[provider]):
+        monkeypatch.delenv(key,raising=False)
     runtime_paths.load_configuration()
-    assert settings.provider_name() == provider
-    assert settings.valid_configuration() and settings.web_enabled() == enabled
+    assert settings.provider_name()==provider and not settings.valid_configuration()
+    monkeypatch.setenv(settings.KEY_NAMES[provider],'offline-environment-value')
+    assert settings.valid_configuration()
 
 
 def test_valid_legacy_skips_setup(monkeypatch):
@@ -44,12 +55,13 @@ def test_valid_legacy_skips_setup(monkeypatch):
 
 
 def test_preserves_model(monkeypatch):
-    monkeypatch.setenv('MODEL_NAME', 'custom-model')
-    answers = iter(['1', '2'])
-    monkeypatch.setattr('builtins.input', lambda _: next(answers))
-    monkeypatch.setattr(settings.getpass, 'getpass', lambda _: 'offline-key')
+    answers=iter(['2','3','1','','custom-model','1'])
+    monkeypatch.setattr('builtins.input',lambda _:next(answers))
+    monkeypatch.setattr(settings.getpass,'getpass',lambda _:'offline-key')
+    provider=SimpleNamespace(generate=Mock(return_value='{"action":"final","answer":"ok"}'))
+    monkeypatch.setattr(ProviderConfigurationService,'create_provider',lambda *a,**k:provider)
     assert settings.ensure_configuration()
-    assert settings.model_name() == 'custom-model'
+    assert settings.model_name()=='custom-model'
 
 
 def test_invalid_settings_fail_closed():
@@ -70,7 +82,8 @@ def test_cancel(monkeypatch):
 
 def test_hidden_input_required(monkeypatch, capsys):
     import warnings
-    monkeypatch.setattr('builtins.input', lambda _: '1')
+    answers=iter(['2','1','1','','selected-model'])
+    monkeypatch.setattr('builtins.input', lambda _: next(answers))
     def no_terminal(_):
         warnings.warn('cannot hide', settings.getpass.GetPassWarning)
     monkeypatch.setattr(settings.getpass, 'getpass', no_terminal)

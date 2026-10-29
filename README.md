@@ -1,209 +1,172 @@
-<p align="center">
-  <img src="athena-icon.png" alt="Athena" width="64">
-</p>
+# Athena — A Modular, Local-First Embodied AI Assistant
 
-<h1 align="center">Athena</h1>
+Athena is a local-first AI assistant with configurable cloud or local intelligence,
+persistent memory, controlled tools, and a path toward eventual physical embodiment
+through a desktop robot. The current software runs on a computer. Hardware
+embodiment, voice, and home-device control are future work.
 
-<p align="center">
-  <strong>Current release: v0.12</strong>
-</p>
+## What works today (through M3.0)
 
-Athena is a local-first AI work assistant for reading local documents, remembering
-approved preferences, searching the web when enabled, and helping summarize,
-compare, analyze and draft.
+- A synchronous assistant runtime with bounded conversation context and
+  permission-checked tools for time, local documents, memory, and optional web
+  search.
+- Local inference through Ollama, or cloud inference through OpenAI, Gemini, or
+  OpenRouter. Provider switching is available after setup and does not reinstall
+  Athena or replace persistent data.
+- JSON memory and experience files remain the default runtime storage. An
+  optional SQLite memory service, explicit JSON migration, retrieval, lifecycle
+  operations, and feedback integration are available to hosts that deliberately
+  select them. SQLite migration does not switch the runtime storage backend.
+- An optional owner-authenticated web settings server, bound to loopback by
+  default. Explicit LAN access requires an operator-supplied trusted TLS
+  certificate and private IPv4 bind address.
 
-Athena is a local-first AI work assistant for reading local documents, remembering
-approved preferences, searching the web when enabled, and helping summarize,
-compare, analyze and draft. Settings and records stay on your machine. Choosing a
-cloud provider sends the task and relevant context to that provider.
+## In progress and planned
 
-## Choose one provider
+The M3.0 web settings page provides provider and local settings on the same
+computer. Its LAN mode has explicit TLS configuration; it is not a hosted or
+public remote service. Desktop settings and trusted robot-based configuration
+are design targets.
 
-| Provider | Runs | API key | Optional Athena web search |
-| --- | --- | --- | --- |
-| OpenRouter | Cloud | One OpenRouter key | OpenRouter web plugin |
-| Gemini | Cloud | One Gemini key | Google Search grounding |
-| Ollama | Local server | None | Unavailable |
+A desktop robot, ESP32 firmware, voice input/output, ESP32 Wi-Fi provisioning and
+recovery, and integration with home or other LAN devices are planned. They are
+not implemented or operational. The address `192.168.4.1` is reserved for the
+future ESP32 setup/recovery flow.
 
-You do not need both cloud providers or multiple API keys. No separate search
-service account is needed. Web search defaults to disabled; cloud searches reuse
-your chosen provider's key and may count toward its API usage or billing.
+`athena.local` is the intended friendly main LAN interface name, but Athena
+does not advertise it and its resolution is not universally available. LAN
+settings access currently requires an explicitly configured trusted HTTPS
+certificate and an address/name that resolves on your network. Loopback access
+is the default.
 
-## Download
+## Install and run
 
-### Windows
-
-[**Download Athena v0.12 for Windows**](https://github.com/theo79/Athena/releases/tag/v0.12)
-
-Download `Athena-v0.12-windows.zip`, extract it, and run `Athena.exe`.
-
-Python is not required for the Windows executable.
-
-## Start Athena
-
-### From source
-
-Use Python **3.12 or newer**. The current code uses Python 3.12 filesystem APIs.
-From the project directory:
+Use Python 3.12 or newer. From the repository directory:
 
 ```sh
 python -m venv .venv
 ```
 
-Activate with `.venv\Scripts\Activate.ps1` in PowerShell or
-`source .venv/bin/activate` on macOS/Linux, then run:
+Activate the environment (PowerShell: `.venv\\Scripts\\Activate.ps1`; macOS/Linux:
+`source .venv/bin/activate`), then install the project:
 
 ```sh
-python -m pip install -r requirements.txt
-python agent.py
+python -m pip install ".[dev]"
+athena
 ```
 
+The installed `athena` command starts Athena and supports the provider
+configuration commands below. The source-tree compatibility entry point
+`python agent.py` is also available.
 
-### First run
+## Select or change an AI provider
 
-1. Choose OpenRouter, Gemini or Ollama.
-2. For a cloud provider, enter its API key using hidden input.
-3. Separately choose whether cloud web search is allowed.
-4. For Ollama, Athena checks the server and asks you to select an installed model;
-   no API key is requested, and web search stays unavailable.
-5. Start working. Use `/help` for commands or `exit` to quit.
+At first setup, or later from the CLI:
 
-Existing valid configuration skips setup. Cloud setup checks key presence, not
-live authentication. Hidden input requires an interactive terminal; Ctrl+C
-cancels setup. Manual configuration is also supported.
+```sh
+athena config provider
+athena config show
+```
 
-For Ollama, install and start [Ollama](https://ollama.com) yourself, then install a
-model, for example `ollama pull llama3.2`. If necessary start the server with
-`ollama serve`. Athena reports an unreachable server or an empty model list and
-never installs Ollama or downloads models automatically.
+From a source checkout without installing the console entry point:
 
-## Commands
+```sh
+python -m provider_cli config provider
+python -m provider_cli config show
+```
 
-| Command | Purpose |
-| --- | --- |
-| `/help` | Show available commands |
-| `/status` | Show provider, model, web access, debug and storage-feature availability; check Ollama connectivity |
-| `/settings` | Inspect current settings |
-| `/settings web on` | Enable cloud web search; rejected for Ollama |
-| `/settings web off` | Disable web search |
-| `/tools` | List tools and permission requirements |
-| `/history` | Show bounded conversation history |
-| `/clear` | Clear conversation context and the feedback target, not persistent records |
-| `/good`, `/bad`, `/neutral` | Rate the last recorded task |
-| `exit` | Exit Athena |
+Choose **Local AI** to use an Ollama server and a model already installed there.
+Athena does not install Ollama, start its server, or download models. The default
+endpoint is `http://localhost:11434`.
 
-Provider switching remains manual. Status availability is not a storage health
-check. Normal output stays concise; `MY_AGENT_DEBUG=true` enables diagnostics.
-The legacy debug variable name is retained for compatibility.
+For cloud inference, select OpenAI, Gemini, or OpenRouter, acknowledge that task
+context may be sent to the selected provider and that usage may incur charges,
+then configure the matching credential environment variable
+(`OPENAI_API_KEY`, `GEMINI_API_KEY`, or `OPENROUTER_API_KEY`). Supply a model
+identifier available to your provider account. The CLI accepts a key only through
+hidden interactive input; a key entered that way is process-only. For later
+launches, configure the selected environment variable using your trusted local
+secret facility. Never put a key in a command argument, source file, issue, or
+committed configuration. Athena does not expose stored credential values.
 
-## Memory, experiences and permissions
+Provider changes are tested before the selected configuration is replaced.
+Successful switches preserve unrelated settings and persistent data. Existing
+legacy `.env` files remain supported and are not rewritten. Consult
+[AI_PROVIDER_CONFIGURATION.md](AI_PROVIDER_CONFIGURATION.md) for details,
+precedence, provider requirements, and limitations.
 
-Conversation history is temporary and bounded. Persistent memory is separate:
-ask Athena to remember something, then approve the `save_memory` confirmation.
-Keyword search retrieves previously saved memory. There is no vector database.
+## Open the web settings page (optional)
 
-Experiences are compact, automatically recorded task histories. Deterministic
-lexical retrieval selects relevant past records; feedback records your assessment
-without training the model. A completed task is not automatically considered
-correct. See [EXPERIENCE.md](EXPERIENCE.md) for scoring, record fields and recovery.
+Install the project as above, then start the separate settings server:
 
-Local reads and web search normally need no per-call confirmation. Local writes
-(`save_memory`) require approval. External writes and sensitive actions are
-reserved permission categories that also require approval. Unknown permissions
-fail closed. Model text cannot approve an action. Automatic experience recording
-and storage recovery retain their existing behavior without approval prompts.
+```sh
+python -m web_settings --port 8765
+```
 
-A request such as “Remember that I prefer brief reports” produces an action
-preview. Enter `y` or `yes` to save; Enter or another response rejects it. Approval
-is per action. These controls apply to model-dispatched tools; they are not a
-sandbox for arbitrary Python code or other programs on your machine.
+The installed equivalent is `athena-settings --port 8765`. The server asks for a
+strong owner token through hidden terminal input unless `ATHENA_SETTINGS_TOKEN`
+is set in its environment. Open **http://127.0.0.1:8765** on the same computer
+and enter the token. The token stays in page memory and is not saved in browser
+storage. Stop the server with Ctrl+C.
 
-## Documents and web search
+The server does not monitor or restart an already running agent. Restart Athena
+after a web-saved provider selection to activate it. Loopback HTTP is the default.
+Plain HTTP LAN access is refused. To enable LAN access, explicitly provide a
+private IPv4 bind address, `--allow-lan`, and an existing trusted TLS certificate
+and private key; follow [ATHENA_WEB_SETTINGS.md](ATHENA_WEB_SETTINGS.md). Do not
+expose the settings server to the public internet or bypass certificate warnings.
 
-The seven tools cover local time, file listing, text/document reading, memory
-save/search and web search. Local files must be within the source directory (or
-the executable's directory in packaged mode), at most 100 KiB, and valid UTF-8.
-`read_document` supports `.txt`, `.md`, `.json` and `.csv` with chunks of up to
-12,000 characters. Longer documents require continuation reads. Filesystem links,
-traversal, known credential files and binary content are blocked.
+## Memory and privacy
 
-For example, ask “Read report.md and summarize the risks.” A bounded five-step
-loop may prevent complete reading; answers should disclose partial coverage.
-PDF, DOCX, OCR and spreadsheet editing are not supported.
+Conversation history is bounded and separate from persistent records. JSON
+(`memory.json` and `experiences.json`) remains the default runtime storage.
+The optional SQLite service is explicit; migration reads the specified JSON
+sources without changing or deleting them. See
+[MEMORY_SERVICE.md](MEMORY_SERVICE.md),
+[MEMORY_MIGRATION.md](MEMORY_MIGRATION.md),
+[MEMORY_RETRIEVAL.md](MEMORY_RETRIEVAL.md), and
+[MEMORY_LIFECYCLE.md](MEMORY_LIFECYCLE.md).
 
-When enabled, `web_search` returns bounded text and source titles/URLs where
-available. Search is activated only on search requests; normal chat requests do
-not add search tools. Results are untrusted external content. Provider model
-support, billing and source metadata vary; failures return friendly messages.
-Gemini decides whether grounding requires an actual search. Athena does not fetch
-source URLs itself. Ollama never falls back to another provider for web search.
+Tool permissions constrain model-dispatched actions, but Athena is not a sandbox
+for arbitrary Python code or other programs running on your computer. Retrieved
+memories, experience evidence, documents, and tool output are untrusted context.
+Relevant task context may be sent to a cloud provider when you choose cloud
+inference. Optional provider web search also sends requests through the selected
+provider and may incur charges. Web search is opt-in. Local inference keeps
+inference on the configured local Ollama service, but does not make local files,
+the operating system, or the assistant sandboxed.
 
-## Configuration and private data
+Preferences and new credential references are stored locally; credentials are
+environment-backed. Legacy installations may have plaintext keys in private
+`.env` files. Keep those files, runtime memory/experience data, SQLite databases,
+backups, and logs private. Run one Athena writer per data directory. See
+[ATHENA_WEB_SETTINGS.md](ATHENA_WEB_SETTINGS.md) and
+[AI_PROVIDER_CONFIGURATION.md](AI_PROVIDER_CONFIGURATION.md) for additional
+security limits.
 
-First-run preferences are saved to `%LOCALAPPDATA%\Athena\config.json`.
-Cloud keys use `%LOCALAPPDATA%\Athena\.env` in plaintext; keep that folder private.
-Ollama needs no `.env`. If LOCALAPPDATA is unavailable, Athena uses
-`AppData\Local\Athena` under your home directory.
-
-| Data | Packaged executable | Source execution |
-| --- | --- | --- |
-| Preferences and setup keys | User Athena directory | Same user Athena directory |
-| Memory, experiences, backups and recovery files | User Athena directory | Beside source files (legacy behavior) |
-| Document workspace | Executable directory | Source directory |
-
-Source-mode stores are private and Git-ignored. Do not upload them. This audit
-preserves that behavior; moving source storage to the user directory requires a
-separate migration. Run only one Athena process per data directory. Backups and
-quarantines may contain private information and are not automatically deleted.
-Relevant memory, experience summaries and document excerpts may be included in
-model context, including when using a cloud provider.
-
-### Manual configuration
-
-Copy `.env.example` to `.env` beside the source or executable if preferred. Set
-`MODEL_PROVIDER` to `openrouter`, `gemini` or `ollama`. Fill only the selected cloud
-provider's key. Defaults for `MODEL_NAME` are `openrouter/free`,
-`gemini-3.1-flash-lite` and `llama3.2`, respectively. Remove an old `MODEL_NAME`
-when switching providers to use the new provider's default.
-
-`WEB_SEARCH_ENABLED=true` opts in for cloud providers; the default is `false`.
-`OLLAMA_BASE_URL` defaults to `http://localhost:11434`. Ollama uses `/api/chat`
-and `/api/tags`, bypasses environment proxies, and does not follow redirects.
-Chat allows 120 seconds for generation and 5 seconds to connect; discovery/status
-checks allow 3 seconds. Use a URL pointing to your intended Ollama server.
-
-JSON preferences use `model_provider`, `model_name`, `web_search_enabled`, and
-`ollama_base_url` for Ollama. Never put keys in this file. Configuration precedence
-is explicit process environment, saved JSON preferences, user-folder `.env`, then
-adjacent `.env`. Web-setting commands apply immediately and save preferences;
-explicit environment variables take precedence again after restart.
-
-## Runtime architecture
-
-The supported CLI remains `python agent.py`. Python hosts can use
-`agent_runtime.AgentRuntime` for synchronous tasks. See [ARCHITECTURE.md](ARCHITECTURE.md)
-for provider injection, session ownership, registry snapshots, confirmations,
-experience services, and the remaining shared-state and single-writer limits.
-
-## Development and tests
+## Tests and development
 
 ```sh
 python -m pip install ".[dev]"
 python -m pytest -q
+python -m pip check
 ```
 
-Tests use fake providers and isolated stores; no live Ollama or cloud account is
-required. They cover all providers, search, setup/settings, the agent loop,
-permissions, memory, experience retrieval, recovery and release safety. The CI
-matrix targets Python 3.12 and 3.14. Windows executable build instructions and
-artifact checks are in [BUILD.md](BUILD.md).
+The project targets Python 3.12+ on Windows and Linux. The configured CI matrix
+covers both operating systems; distribution checks also exercise Debian, Fedora,
+and Arch Linux. A configured CI target is not evidence of a run—consult the
+repository's actual CI results for current platform verification. Windows
+packaging instructions and checks are in [BUILD.md](BUILD.md).
 
-## Current limits and license
+## Documentation and license
 
-Athena has no Gmail, Drive or Calendar integration, GUI, unrestricted computer
-control, autonomous background work, semantic/vector memory or Ollama web search.
-Local models vary in speed and ability to follow the action protocol. Keys use a
-private plaintext fallback rather than Windows Credential Manager. The Windows
-executable is unsigned and has no installer or automatic updater.
-
-Licensed under [Apache License 2.0](LICENSE).
+- [Architecture](ARCHITECTURE.md)
+- [Experience records and feedback](EXPERIENCE.md)
+- [Provider configuration](AI_PROVIDER_CONFIGURATION.md)
+- [Web settings](ATHENA_WEB_SETTINGS.md)
+- [SQLite memory service](MEMORY_SERVICE.md)
+- [JSON-to-SQLite migration](MEMORY_MIGRATION.md)
+- [Memory retrieval](MEMORY_RETRIEVAL.md)
+- [Memory lifecycle](MEMORY_LIFECYCLE.md)
+- [Windows packaging](BUILD.md)
+- [Apache License 2.0](LICENSE)

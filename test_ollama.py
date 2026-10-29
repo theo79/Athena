@@ -15,8 +15,9 @@ import tools
 
 @pytest.fixture(autouse=True)
 def isolated(monkeypatch, tmp_path):
-    for name in ('MODEL_PROVIDER', 'MODEL_NAME', 'OLLAMA_BASE_URL', 'OPENROUTER_API_KEY', 'GEMINI_API_KEY', 'WEB_SEARCH_ENABLED'):
-        monkeypatch.delenv(name, raising=False)
+    for name in ('MODEL_PROVIDER', 'MODEL_NAME', 'MODEL_CREDENTIAL_ENV', 'OLLAMA_BASE_URL', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'GEMINI_API_KEY', 'WEB_SEARCH_ENABLED'):
+        monkeypatch.setenv(name, '')
+        monkeypatch.delenv(name)
     monkeypatch.setattr(runtime_paths, 'config_path', lambda: tmp_path / 'legacy.env')
     monkeypatch.setattr(agent, 'model_provider', None)
     monkeypatch.setattr(models, 'OpenAI', Mock(side_effect=AssertionError('Cloud call')))
@@ -135,37 +136,38 @@ def test_invalid_model_listing(server, data):
     assert isinstance(models.OllamaProvider().list_models(), models.ModelFailure)
 
 
-def test_setup_no_key(server, monkeypatch, capsys):
-    server({'models': [{'name': 'llama3.2:latest'}, {'name': 'qwen3:8b'}]})
-    monkeypatch.setenv('OLLAMA_BASE_URL', 'http://127.0.0.1:12345')
-    answers = iter(['3', '9', '2'])
-    monkeypatch.setattr('builtins.input', lambda _: next(answers))
-    monkeypatch.setattr(settings.getpass, 'getpass', lambda _: pytest.fail('No key prompt allowed'))
+def test_setup_no_key(monkeypatch, capsys):
+    from types import SimpleNamespace
+    from provider_configuration import ProviderConfigurationService
+    provider=SimpleNamespace(list_models=lambda:['llama3.2:latest','qwen3:8b'],
+        generate=lambda messages:'{"action":"final","answer":"ok"}')
+    monkeypatch.setattr(ProviderConfigurationService,'create_provider',lambda *a,**k:provider)
+    answers=iter(['1','http://127.0.0.1:12345','1','qwen3:8b','1'])
+    monkeypatch.setattr('builtins.input',lambda _:next(answers))
+    monkeypatch.setattr(settings.getpass,'getpass',lambda _:pytest.fail('No key prompt allowed'))
     assert settings.ensure_configuration()
-    output = capsys.readouterr().out
-    assert 'Ollama is running.' in output and '2. qwen3:8b' in output
-    assert 'Web search is not available in local Ollama mode yet.' in output
-    assert json.loads(settings.preferences_path().read_text()) == {
-        'model_provider': 'ollama', 'model_name': 'qwen3:8b', 'web_search_enabled': False,
-        'ollama_base_url': 'http://127.0.0.1:12345'}
-    assert not (runtime_paths.user_config_dir() / '.env').exists()
-    for name in ('MODEL_PROVIDER', 'MODEL_NAME', 'OLLAMA_BASE_URL', 'WEB_SEARCH_ENABLED'):
-        monkeypatch.delenv(name, raising=False)
+    output=capsys.readouterr().out
+    assert 'qwen3:8b' in output and 'Web search is not available in local Ollama mode yet.' in output
+    data=json.loads(settings.preferences_path().read_text())
+    assert data['model_provider']=='local' and data['model_name']=='qwen3:8b'
+    assert data['ollama_base_url']=='http://127.0.0.1:12345' and data['credential_env'] is None
+    assert not (runtime_paths.user_config_dir()/'.env').exists()
+    for name in ('MODEL_PROVIDER','MODEL_NAME','OLLAMA_BASE_URL'):
+        monkeypatch.delenv(name,raising=False)
     runtime_paths.load_configuration()
-    assert settings.valid_configuration() and settings.provider_name() == 'ollama'
-    assert models.get_model_provider().base_url == 'http://127.0.0.1:12345'
-    assert settings.model_name() == 'qwen3:8b'
+    assert settings.valid_configuration() and settings.provider_name()=='local'
+    assert models.get_model_provider().base_url=='http://127.0.0.1:12345'
 
 
-@pytest.mark.parametrize('unreachable', [False, True])
-def test_setup_unavailable(server, monkeypatch, capsys, unreachable):
-    server({'models': []}, error=httpx.ConnectError('private') if unreachable else None)
-    monkeypatch.setattr('builtins.input', lambda _: '3')
+@pytest.mark.parametrize('unreachable',[False,True])
+def test_setup_unavailable(server,monkeypatch,capsys,unreachable):
+    server({'models':[]},error=httpx.ConnectError('private') if unreachable else None)
+    answers=iter(['1','','2','local-model','1'])
+    monkeypatch.setattr('builtins.input',lambda _:next(answers))
     assert not settings.ensure_configuration()
-    output = capsys.readouterr().out
-    assert ('not reachable at http://localhost:11434' if unreachable else 'No Ollama models are installed.') in output
-    assert ('ollama serve' if unreachable else 'ollama pull llama3.2') in output
-    assert not settings.preferences_path().exists()
+    output=capsys.readouterr().out
+    assert ('Could not reach' if unreachable else 'unavailable or not installed') in output
+    assert 'private' not in output and not settings.preferences_path().exists()
 
 
 @pytest.mark.parametrize('value', ['true', 'false'])

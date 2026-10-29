@@ -16,6 +16,7 @@ from openai import (OpenAI, RateLimitError, AuthenticationError,
 class ModelFailure:
     """Safe message kept separate from model text and parser failures."""
     message: str
+    code: str = "provider_error"
 
 
 class ModelProvider(Protocol):
@@ -27,20 +28,62 @@ class ModelConfigurationError(ValueError):
     """Invalid provider selection; never silently fall back."""
 
 
+def _status_code(code):
+    return {401: 'invalid_credentials', 403: 'invalid_credentials', 404: 'model_unavailable',
+            429: 'rate_limit', 408: 'timeout', 504: 'timeout',
+            400: 'unsupported_capability', 422: 'unsupported_capability'}.get(code, 'provider_error')
+
+
+class OpenAIProvider:
+    """Official Responses API; model selection is always caller/config supplied."""
+    provider_name = 'openai'
+
+    def __init__(self, model_name, *, api_key=None):
+        self.model_name = model_name
+        self._api_key = api_key
+        self.client = None
+
+    def generate(self, messages):
+        key = self._api_key if self._api_key is not None else os.getenv(
+            os.getenv('MODEL_CREDENTIAL_ENV') or 'OPENAI_API_KEY', '')
+        if self.client is None and not key.strip():
+            return ModelFailure('Model provider authentication failed. OPENAI_API_KEY is not configured.',
+                                'missing_credentials')
+        if not self.model_name.strip():
+            return ModelFailure('Configure an OpenAI model identifier.', 'model_unavailable')
+        try:
+            if self.client is None:
+                self.client = OpenAI(api_key=key.strip(), base_url='https://api.openai.com/v1',
+                                     max_retries=0, timeout=30.0)
+            response = self.client.responses.create(model=self.model_name, input=messages, store=False)
+        except APITimeoutError:
+            return ModelFailure('Model provider request timed out.', 'timeout')
+        except APIConnectionError:
+            return ModelFailure('Could not connect to the model provider.', 'unreachable')
+        except APIStatusError as exc:
+            return ModelFailure('Model provider request failed. Check credentials, model and quota.',
+                                _status_code(exc.status_code))
+        text = response.output_text
+        if not isinstance(text, str) or not text.strip():
+            return ModelFailure('Model provider returned no text.', 'unsupported_capability')
+        return text
+
+
 class OpenRouterProvider:
     provider_name = "openrouter"
 
-    def __init__(self, model_name=DEFAULT_MODELS["openrouter"]):
+    def __init__(self, model_name=DEFAULT_MODELS["openrouter"], *, api_key=None):
+        self._api_key = api_key
         self.model_name = model_name
         self.client = None
 
     def generate(self, messages):
         if self.client is None:
-            api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+            api_key = (self._api_key if self._api_key is not None else os.getenv(os.getenv("MODEL_CREDENTIAL_ENV") or "OPENROUTER_API_KEY", "")).strip()
             if not api_key:
-                return ModelFailure("Model provider authentication failed. OPENROUTER_API_KEY is not configured.")
+                return ModelFailure("Model provider authentication failed. OPENROUTER_API_KEY is not configured.", "missing_credentials")
             self.client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key,
-                                 max_retries=0)
+                                 max_retries=0, timeout=30.0)
         try:
             response = self.client.chat.completions.create(
                 model=self.model_name,
@@ -48,15 +91,15 @@ class OpenRouterProvider:
             )
         except RateLimitError:
             return ModelFailure("Model provider rate limit reached. Try again after the "
-                                "provider reset or configure another model/provider.")
+                                "provider reset or configure another model/provider.", "rate_limit")
         except AuthenticationError:
-            return ModelFailure("Model provider authentication failed. Check the configured API key.")
+            return ModelFailure("Model provider authentication failed. Check the configured API key.", "invalid_credentials")
         except APITimeoutError:  # A subclass of APIConnectionError: handle it first.
-            return ModelFailure("Model provider request timed out.")
+            return ModelFailure("Model provider request timed out.", "timeout")
         except APIConnectionError:
-            return ModelFailure("Could not connect to the model provider.")
+            return ModelFailure("Could not connect to the model provider.", "unreachable")
         except APIStatusError as exc:
-            return ModelFailure(f"Model provider returned an API error: {exc.status_code}")
+            return ModelFailure(f"Model provider returned an API error: {exc.status_code}", _status_code(exc.status_code))
 
         return response.choices[0].message.content
 
@@ -64,15 +107,16 @@ class OpenRouterProvider:
 class GeminiProvider:
     provider_name = "gemini"
 
-    def __init__(self, model_name=DEFAULT_MODELS["gemini"]):
+    def __init__(self, model_name=DEFAULT_MODELS["gemini"], *, api_key=None):
+        self._api_key = api_key
         self.model_name = model_name
         self.client = None
 
     def generate(self, messages):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "").strip()
+            api_key = (self._api_key if self._api_key is not None else os.getenv(os.getenv("MODEL_CREDENTIAL_ENV") or "GEMINI_API_KEY", "")).strip()
             if not api_key:
-                return ModelFailure("Model provider authentication failed. GEMINI_API_KEY is not configured.")
+                return ModelFailure("Model provider authentication failed. GEMINI_API_KEY is not configured.", "missing_credentials")
             self.client = genai.Client(
                 api_key=api_key, vertexai=False,
                 http_options=types.HttpOptions(
@@ -99,20 +143,24 @@ class GeminiProvider:
                     system_instruction="\n\n".join(instructions) or None,
                     automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)))
         except errors.APIError as exc:
+            if exc.code == 400 and any(term in str(exc).lower() for term in (
+                    'api_key_invalid', 'api key not valid', 'invalid api key')):
+                return ModelFailure('Model provider authentication failed. Check the configured API key.',
+                                    'invalid_credentials')
             if exc.code == 429:
                 return ModelFailure("Model provider rate limit reached. Try again after the "
-                                    "provider reset or configure another model/provider.")
+                                    "provider reset or configure another model/provider.", "rate_limit")
             if exc.code in (401, 403):
-                return ModelFailure("Model provider authentication failed. Check the configured API key.")
+                return ModelFailure("Model provider authentication failed. Check the configured API key.", "invalid_credentials")
             if exc.code in (408, 504):
-                return ModelFailure("Model provider request timed out.")
-            return ModelFailure(f"Model provider returned an API error: {exc.code}")
+                return ModelFailure("Model provider request timed out.", "timeout")
+            return ModelFailure(f"Model provider returned an API error: {exc.code}", _status_code(exc.code))
         except httpx.TimeoutException:
-            return ModelFailure("Model provider request timed out.")
+            return ModelFailure("Model provider request timed out.", "timeout")
         except httpx.TransportError:
-            return ModelFailure("Could not connect to the model provider.")
+            return ModelFailure("Could not connect to the model provider.", "unreachable")
         if not response.text:
-            return ModelFailure("Model provider returned no text (possibly blocked or empty response).")
+            return ModelFailure("Model provider returned no text (possibly blocked or empty response).", "unsupported_capability")
         return response.text
 
 
@@ -148,14 +196,14 @@ class OllamaProvider:
                 response = (client.post(self.base_url + endpoint, json=payload) if payload is not None
                             else client.get(self.base_url + endpoint))
             if response.status_code == 404 and payload is not None:
-                return ModelFailure(f"Ollama model '{self.model_name}' is not installed.\nInstall it with:\nollama pull {self.model_name}")
+                return ModelFailure(f"Ollama model '{self.model_name}' is not installed.\nInstall it with:\nollama pull {self.model_name}", "model_unavailable")
             if not response.is_success:
-                return ModelFailure("Ollama could not complete the request. Check that the server and model are available, then try again.")
+                return ModelFailure("Ollama could not complete the request. Check that the server and model are available, then try again.", _status_code(response.status_code))
             data = response.json()
         except httpx.TimeoutException:
-            return ModelFailure("Ollama request timed out. The model may still be loading; please try again.")
+            return ModelFailure("Ollama request timed out. The model may still be loading; please try again.", "timeout")
         except httpx.TransportError:
-            return ModelFailure(f"Ollama is not reachable at {self.base_url}.\nInstall or start Ollama, then try again. You can start the server with: ollama serve")
+            return ModelFailure(f"Ollama is not reachable at {self.base_url}.\nInstall or start Ollama, then try again. You can start the server with: ollama serve", "unreachable")
         except (ValueError, UnicodeError):
             return ModelFailure("Ollama returned an invalid response. Please try again.")
         if not isinstance(data, dict) or "error" in data:
@@ -175,7 +223,7 @@ class OllamaProvider:
         content = message.get("content") if isinstance(message, dict) else None
         if (not isinstance(content, str) or not content.strip()
                 or message.get("role") != "assistant" or data.get("done") is not True):
-            return ModelFailure("Ollama returned an invalid or empty response. Please try again.")
+            return ModelFailure("Ollama returned an invalid or empty response. Please try again.", "unsupported_capability")
         return content
 
     def list_models(self):
@@ -206,6 +254,11 @@ def get_model_provider() -> ModelProvider:
         return OpenRouterProvider(model_name=model_name(name))
     if name == "gemini":
         return GeminiProvider(model_name=model_name(name))
-    if name == "ollama":
+    if name == "openai":
+        selected = model_name(name)
+        if not selected:
+            raise ModelConfigurationError('Configure an OpenAI model identifier.')
+        return OpenAIProvider(model_name=selected)
+    if name in ("ollama", "local"):
         return OllamaProvider(model_name=model_name(name), base_url=ollama_base_url())
     raise ModelConfigurationError(f"Unsupported model provider: {name}")

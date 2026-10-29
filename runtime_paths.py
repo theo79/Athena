@@ -7,6 +7,9 @@ from tempfile import NamedTemporaryFile
 
 from dotenv import load_dotenv
 
+PROVIDER_SELECTION_CONFLICTS = ()
+_PROVIDER_CONFLICT_PATH = None
+
 
 def is_packaged():
     return bool(getattr(sys, "frozen", False))
@@ -43,15 +46,40 @@ def experience_path():
 def load_configuration():
     # Explicit lookup never searches the current directory or extraction directory.
     from settings import load_preferences
-    # Explicit process environment > saved preferences > legacy adjacent .env.
-    # Keep provider and model paired if the process chooses a different provider.
+    global PROVIDER_SELECTION_CONFLICTS, _PROVIDER_CONFLICT_PATH
+    from provider_configuration import read_preferences, ConfigurationError, ProviderConfigurationService
+    from settings import preferences_path
+    try:
+        data, _ = read_preferences(preferences_path())
+    except ConfigurationError:
+        data = {}
+    managed = data.get('provider_selection_source') == 'service'
     preferences = load_preferences()
-    if os.getenv("MODEL_PROVIDER", preferences.get("MODEL_PROVIDER")) != preferences.get("MODEL_PROVIDER"):
+    if not managed and os.getenv("MODEL_PROVIDER", preferences.get("MODEL_PROVIDER")) != preferences.get("MODEL_PROVIDER"):
         preferences.pop("MODEL_NAME", None)
+        preferences.pop("MODEL_CREDENTIAL_ENV", None)
     for name, value in preferences.items():
         os.environ.setdefault(name, value)
     load_dotenv(user_config_dir() / ".env", override=False)
     load_dotenv(config_path(), override=False)
+    if managed and 'MODEL_PROVIDER' in preferences:
+        path = preferences_path().resolve()
+        previous = PROVIDER_SELECTION_CONFLICTS if _PROVIDER_CONFLICT_PATH == path else ()
+        try:
+            conflicts = ProviderConfigurationService(environ=dict(os.environ)).selection_status()['conflicts']
+        except ConfigurationError:
+            conflicts = []
+        PROVIDER_SELECTION_CONFLICTS = tuple(sorted(set(previous) | set(conflicts)))
+        _PROVIDER_CONFLICT_PATH = path
+        # Explicit service selection survives stale exported/legacy selectors.
+        # Credentials and unrelated preferences retain their existing precedence.
+        for name in ('MODEL_PROVIDER', 'MODEL_NAME', 'MODEL_CREDENTIAL_ENV'):
+            if name in preferences:
+                os.environ[name] = preferences[name]
+            elif name == 'MODEL_CREDENTIAL_ENV':
+                os.environ.pop(name, None)
+        if preferences['MODEL_PROVIDER'] in ('local', 'ollama') and 'OLLAMA_BASE_URL' in preferences:
+            os.environ['OLLAMA_BASE_URL'] = preferences['OLLAMA_BASE_URL']
 
 
 def _copy_legacy(source, destination):

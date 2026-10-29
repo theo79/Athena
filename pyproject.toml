@@ -10,13 +10,17 @@ readme = "README.md"
 requires-python = ">=3.12"
 dynamic = ["dependencies"]
 
+[project.scripts]
+athena = "provider_cli:main"
+athena-settings = "web_settings:main"
+
 [project.optional-dependencies]
 dev = ["pytest"]
 build = ["pyinstaller==6.22.0"]
 
 [tool.setuptools]
-py-modules = ["agent", "agent_runtime", "conversation", "diagnostics", "experience", "json_storage", "models", "runtime_paths", "search_provider", "settings", "sqlite_store", "tools"]
-packages = ["tool_modules"]
+py-modules = ["agent", "agent_runtime", "conversation", "diagnostics", "experience", "json_storage", "memory_service", "memory_migration", "memory_retrieval", "models", "provider_configuration", "provider_cli", "web_settings", "runtime_paths", "search_provider", "settings", "sqlite_store", "tools"]
+packages = ["tool_modules", "web_assets"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
@@ -24,3 +28,6 @@ dependencies = {file = ["requirements.txt"]}
 [tool.pytest.ini_options]
 testpaths = ["."]
 python_files = ["test_*.py"]
+
+[tool.setuptools.package-data]
+web_assets = ["*.html", "*.css", "*.js"]

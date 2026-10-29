@@ -82,6 +82,22 @@ def record_timestamp(record):
 
 
 def find_relevant_experiences(task, limit=MAX_RETRIEVED_EXPERIENCES):
+    if type(limit) is not int or limit <= 0:
+        return []
+    words = task_tokens(task)
+    if not words:
+        return []
+    try:
+        if not EXPERIENCES_FILE.exists() and not EXPERIENCES_FILE.with_name(EXPERIENCES_FILE.name + ".bak").exists():
+            return []
+        records = load_experiences()
+    except OSError:
+        debug_print("Warning: experience retrieval unavailable; continuing without history.")
+        return []
+    return rank_experiences(task, records, limit)
+
+
+def rank_experiences(task, records, limit=MAX_RETRIEVED_EXPERIENCES):
     """Require weighted Jaccard >= 0.45 BEFORE applying ranking adjustments.
 
 Score = relevance + quality bonus (+0.08/0/-0.08) + 0.02 * feedback reward
@@ -96,13 +112,6 @@ All failed/rejected records are cautionary evidence, never positive examples.
         return []
     words = task_tokens(task)
     if not words:
-        return []
-    try:
-        if not EXPERIENCES_FILE.exists() and not EXPERIENCES_FILE.with_name(EXPERIENCES_FILE.name + ".bak").exists():
-            return []
-        records = load_experiences()
-    except OSError:
-        debug_print("Warning: experience retrieval unavailable; continuing without history.")
         return []
     candidates = []
     for record in records:

@@ -86,7 +86,7 @@ def search(query, max_results):
     if not settings.web_enabled():
         raise SearchError("Web search is disabled in Athena settings.")
     provider = settings.provider_name()
-    key = os.getenv(settings.KEY_NAMES.get(provider, ""), "").strip()
+    key = os.getenv(settings.credential_env(provider), "").strip()
     if not key:
         raise SearchError(AUTH_ERROR)
     try:

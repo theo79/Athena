@@ -11,6 +11,15 @@ import tools
 
 
 @pytest.fixture
+def isolated_memories():
+    """Keep real path constants for this module's path contracts.
+
+    These tests never run inference. Every storage operation below explicitly
+    selects temporary packaged paths, so real memory is never read or written.
+    """
+
+
+@pytest.fixture
 def frozen(tmp_path, monkeypatch):
     app = tmp_path / "application"
     app.mkdir()
