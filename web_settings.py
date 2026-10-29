@@ -11,15 +11,35 @@ import ipaddress
 import json
 import os
 import platform
+from pathlib import Path
 import secrets
 import socket
 import ssl
 from time import perf_counter
 
 from provider_configuration import ProviderConfig, ProviderConfigurationService, ConfigurationError
+from device_gateway import DeviceError, DeviceGateway
 
 MAX_BODY = 8192
 READ_TIMEOUT = 5
+
+
+def _unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError('Duplicate JSON fields are not allowed.')
+        result[key] = value
+    return result
+
+
+def _address(address):
+    return f'{address[0]}:{address[1]}'
+
+
+def _stop_devices(gateway):
+    gateway.stop()
+    return {'enabled':False,'listen':None}
 
 
 def network_info():
@@ -36,7 +56,8 @@ class SettingsServer(HTTPServer):
     allow_reuse_address = True
 
     def __init__(self, service, *, owner_token, bind='127.0.0.1', port=8765,
-                 allow_lan=False, tls_context=None, local_endpoints=(), network_reader=network_info):
+                 allow_lan=False, tls_context=None, local_endpoints=(), network_reader=network_info,
+                 device_registry_path=None, device_port=8766):
         if type(port) is not int or not 0 <= port <= 65535:
             raise ValueError('Use a port between 0 and 65535.')
         address = ipaddress.ip_address(bind)
@@ -52,6 +73,14 @@ class SettingsServer(HTTPServer):
         self.scheme = 'https' if tls_context is not None else 'http'
         self.network_reader = network_reader
         self.last_check = None
+        if device_registry_path is None:
+            configured_path = getattr(service, 'path', None)
+            if configured_path is not None:
+                device_registry_path = Path(configured_path).with_name('devices.json')
+            else:
+                import settings
+                device_registry_path = settings.preferences_path().with_name('devices.json')
+        self.device_gateway = DeviceGateway(device_registry_path, port=device_port)
         self.allowed_endpoints = {'http://localhost:11434', 'http://127.0.0.1:11434'}
         for endpoint in local_endpoints:
             config = service.validate(ProviderConfig('local', 'endpoint-validation', endpoint))
@@ -77,6 +106,10 @@ class SettingsServer(HTTPServer):
 
     def handle_error(self, request, client_address):
         pass  # Never send/log request bodies, bearer headers, exceptions or provider payloads.
+
+    def server_close(self):
+        self.device_gateway.stop()
+        super().server_close()
 
     @property
     def url(self):
@@ -135,6 +168,18 @@ class SettingsHandler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def _discard_small_request_body(self):
+        """Drain only tiny declared POST bodies before closing an error response."""
+        lengths = self.headers.get_all("Content-Length", [])
+        if len(lengths) != 1:
+            return
+        try:
+            length = int(lengths[0])
+        except ValueError:
+            return
+        if 0 < length <= MAX_BODY + 1:
+            self.rfile.read(length)
+
     def do_GET(self):
         if self.path in ('/', '/assets/settings.css', '/assets/settings.js'):
             # Public login shell only: active settings/network details require owner authentication.
@@ -165,15 +210,71 @@ class SettingsHandler(BaseHTTPRequestHandler):
         check = self.server.last_check
         if check and check['selection'] != config:
             check = None
+        try:
+            devices = self.server.device_gateway.status()
+            device_error = None
+        except DeviceError:
+            devices = {'enabled':False,'listen':None,'transport':'loopback_unencrypted','paired':[],'pending':[]}
+            device_error = 'Device registry unavailable; it was left unchanged.'
         self._reply(200, {'configuration':config,'selection_status':policy,'configuration_error':error,
-            'csrf':self.server._csrf,'last_check':check,'network':network,
+            'csrf':self.server._csrf,'last_check':check,'devices':devices,'device_error':device_error,'network':network,
             'listen':self.server.url,'local_endpoints':sorted(self.server.allowed_endpoints),
             'system':{'version':'0.12','os':platform.system()},
             'runtime':'Settings server running. Agent runtime is not monitored.',
             'activation':'Saved changes apply to Athena on its next start. Restart any running agent.'})
 
+    def _handle_device_post(self):
+        lengths = self.headers.get_all('Content-Length', [])
+        if self.headers.get('Transfer-Encoding') or len(lengths) != 1:
+            self._reply(400, {'error':'A single Content-Length is required.'})
+            return
+        try:
+            length = int(lengths[0])
+        except ValueError:
+            length = -1
+        if not 0 < length <= MAX_BODY:
+            self._reply(413, {'error':'Request size exceeds the permitted limit.'})
+            self._discard_small_request_body()
+            return
+        if self.headers.get('Content-Type') != 'application/json':
+            self._reply(415, {'error':'Use application/json.'})
+            return
+        try:
+            body = self.rfile.read(length)
+            if len(body) != length:
+                raise ValueError
+            payload = json.loads(body.decode('utf-8'), object_pairs_hook=_unique_object)
+            if type(payload) is not dict:
+                raise ValueError
+            actions = {
+                '/api/devices/start': (set(), lambda: {'enabled':True,'listen':_address(self.server.device_gateway.start())}),
+                '/api/devices/stop': (set(), lambda: _stop_devices(self.server.device_gateway)),
+                '/api/devices/approve': ({'request_id'}, lambda: self.server.device_gateway.approve_pairing(payload['request_id'])),
+                '/api/devices/reject': ({'request_id'}, lambda: self.server.device_gateway.reject_pairing(payload['request_id'])),
+                '/api/devices/revoke': ({'device_id'}, lambda: self.server.device_gateway.revoke_device(payload['device_id'])),
+                '/api/devices/command': ({'device_id','name','arguments'}, lambda: self.server.device_gateway.send_command(
+                    payload['device_id'],payload['name'],payload['arguments'])),
+            }
+            required, action = actions[self.path]
+            if set(payload) != required:
+                raise ValueError
+            result = action()
+        except (ValueError, TypeError, UnicodeError, DeviceError, ConfigurationError):
+            self._reply(400, {'error':'Device request was rejected. Check pairing state and allowed command arguments.'})
+            return
+        except (OSError, TimeoutError):
+            self._reply(408, {'error':'Device operation timed out or the connection closed.'})
+            return
+        self._reply(200, result)
+
     def do_POST(self):
         if not self._guard(write=True):
+            self._discard_small_request_body()
+            return
+        device_paths = {'/api/devices/start','/api/devices/stop','/api/devices/approve',
+                        '/api/devices/reject','/api/devices/revoke','/api/devices/command'}
+        if self.path in device_paths:
+            self._handle_device_post()
             return
         if self.path not in ('/api/test', '/api/switch', '/api/models'):
             self._reply(404, {'error':'Not found.'})
@@ -188,6 +289,7 @@ class SettingsHandler(BaseHTTPRequestHandler):
             length = -1
         if not 0 < length <= MAX_BODY:
             self._reply(413, {'error':'Request size exceeds the permitted limit.'})
+            self._discard_small_request_body()
             return
         if self.headers.get('Content-Type') != 'application/json':
             self._reply(415, {'error':'Use application/json.'})
@@ -241,6 +343,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--bind',default='127.0.0.1')
     parser.add_argument('--port',type=int,default=8765)
+    parser.add_argument('--device-port',type=int,default=8766)
     parser.add_argument('--allow-lan',action='store_true')
     parser.add_argument('--cert')
     parser.add_argument('--key')
@@ -264,7 +367,8 @@ def main(argv=None):
         import runtime_paths
         runtime_paths.load_configuration()
         server = SettingsServer(ProviderConfigurationService(), owner_token=token, bind=args.bind,
-            port=args.port, allow_lan=args.allow_lan,tls_context=context,local_endpoints=args.local_endpoint)
+            port=args.port, allow_lan=args.allow_lan,tls_context=context,local_endpoints=args.local_endpoint,
+            device_port=args.device_port)
         print('Athena Settings: '+server.url+' (owner authentication required)')
         print('Press Ctrl+C to stop. No provider connection is tested on startup.')
         server.serve_forever(poll_interval=0.25)

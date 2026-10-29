@@ -139,6 +139,21 @@ updates. Reads can create or repair files during recovery. Backups and quarantin
 retain private data without automatic expiry. No SQLite migration, locking or
 retention policy is introduced by M1.
 
+## Device communication foundation (M3.1)
+
+The optional DeviceGateway is a component owned by the existing SettingsServer;
+it does not create another agent runtime or depend on AgentRuntime, a model
+provider, memory, or experience storage. It is disabled until an owner starts it.
+M3.1 binds its versioned bounded JSON-line protocol to loopback only. The
+owner-authenticated settings page lists pending requests and paired identities,
+approves or rejects pairing, and revokes devices without exposing credentials.
+See [ATHENA_DEVICE_PROTOCOL.md](ATHENA_DEVICE_PROTOCOL.md) for message schemas,
+HMAC challenge proofs, bounds, simulator usage and transport limits.
+
+Pairing authenticates a simulated identity on the same host; messages are not
+encrypted. No device listener accepts LAN connections. M3.1 does not implement
+firmware, audio, Wi-Fi provisioning or physical outputs.
+
 ## Validation and packaging
 
 Use Python 3.12+ and the development environment to run:

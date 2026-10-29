@@ -223,5 +223,9 @@ one-file Windows executable distribution is not built by this milestone.
 - UI save appears stale in chat: restart the separate agent; no hot runtime
   replacement is attempted from the web process.
 
-M3.1, ESP32/Wi-Fi provisioning, voice, home automation, certificate issuance and
-production multi-user identity infrastructure remain outside scope.
+The M3.1 device panel can explicitly start and stop the separate loopback-only
+simulator gateway and approve or revoke pairing. The Settings server's optional
+LAN TLS does not encrypt or expose that device socket. See
+[ATHENA_DEVICE_PROTOCOL.md](ATHENA_DEVICE_PROTOCOL.md). ESP32 firmware,
+Wi-Fi provisioning, voice, home automation, certificate issuance and production
+multi-user identity infrastructure remain outside scope.

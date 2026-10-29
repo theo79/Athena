@@ -53,3 +53,6 @@ Thumbs.db
 .coverage.*
 htmlcov/
 .tox/
+# Device registry includes authentication verifier material
+devices.json
+devices.json.*
