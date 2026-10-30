@@ -9,7 +9,7 @@ ID_PATTERN = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-
 DEVICE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 EXPRESSIONS = frozenset({"neutral", "happy", "curious", "thinking", "sleepy"})
 LED_STATES = frozenset({"on", "off"})
-COMMANDS = frozenset({"display.set_expression", "led.set_state", "device.get_status"})
+COMMANDS = frozenset({"display.set_expression", "led.set_state", "device.get_status", "display.set_text", "display.set_status"})
 
 
 class ProtocolError(ValueError):
@@ -64,6 +64,10 @@ def _arguments(name, arguments):
         _exact_fields(arguments, {"expression"})
         if type(arguments["expression"]) is not str or arguments["expression"] not in EXPRESSIONS:
             raise ProtocolError("Invalid expression.")
+    elif name in ("display.set_text", "display.set_status"):
+        field = "text" if name == "display.set_text" else "status"
+        _exact_fields(arguments, {field})
+        _text(arguments[field], field, 256 if field == "text" else 64)
     elif name == "led.set_state":
         _exact_fields(arguments, {"state"})
         if type(arguments["state"]) is not str or arguments["state"] not in LED_STATES:
@@ -105,6 +109,8 @@ def validate_message(message, *, direction="device"):
             "command": ({"type", "protocol_version", "message_id", "device_id", "command_id", "name", "arguments"}, set()),
             "error": ({"type", "protocol_version", "message_id", "device_id", "code", "message"}, set()),
         }
+    if type(kind) is not str:
+        raise ProtocolError("Invalid protocol message type.")
     schema = schemas.get(kind)
     if schema is None:
         raise ProtocolError("Unknown protocol message type.")
@@ -188,7 +194,7 @@ def decode_line(raw, *, direction="device"):
     try:
         value = json.loads(raw[:-1].decode("utf-8"), object_pairs_hook=_unique_object,
                            parse_constant=lambda _: (_ for _ in ()).throw(ProtocolError("Invalid JSON number.")))
-    except (UnicodeError, json.JSONDecodeError) as exc:
+    except (UnicodeError, json.JSONDecodeError, RecursionError) as exc:
         raise ProtocolError("Invalid JSON message.") from exc
     return validate_message(value, direction=direction)
 

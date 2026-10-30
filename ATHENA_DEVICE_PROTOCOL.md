@@ -1,4 +1,4 @@
-# Athena device protocol and pairing (M3.1)
+# Athena device protocol, pairing, and WebSocket sessions (M3.2)
 
 M3.1 adds a loopback-only software foundation for a future desktop device. The
 Core process remains responsible for provider configuration, memory, permissions,
@@ -9,16 +9,15 @@ provisioning is implemented.
 
 ## Network boundary
 
-The gateway is **disabled until an owner starts it** in the authenticated Athena
+The legacy TCP gateway is **disabled until an owner starts it** in the authenticated Athena
 Settings page. It binds only to `127.0.0.1` on the configured device port (default
 8766). The page's own optional LAN mode does not change this listener. The
 gateway rejects non-loopback peers and has no LAN option in M3.1.
 
 Device frames are not encrypted. Pairing credentials cross the loopback socket.
 This is a local simulator foundation, not a claim that pairing is secure on a LAN.
-Do not connect physical devices or forward the port. A future network transport
-must provide authenticated encryption and peer identity before it can accept LAN
-connections. The existing Settings page can itself use operator-configured TLS
+Do not connect physical devices or forward the port. The M3.2 WebSocket adapter described below provides a separate opt-in TLS
+transport for previously paired identities. The existing Settings page can itself use operator-configured TLS
 for its own remote browser session; that does not wrap the device socket.
 
 The device registry is stored as `devices.json` beside Athena's provider settings.
@@ -32,7 +31,8 @@ to the browser or written to request logs.
 
 ## Protocol v1
 
-Transport is one UTF-8 JSON object per LF-terminated TCP frame. Each frame is
+Legacy TCP transport is one UTF-8 JSON object per LF-terminated frame.
+WebSocket transport is one JSON object per text message, without a trailing LF. Each frame is
 limited to 4096 bytes. Duplicate object keys, non-finite JSON numbers, unknown
 fields, invalid types, invalid identifiers and unsupported versions are rejected.
 Both peers use UUID message identifiers; device IDs are 1-64 ASCII letters,
@@ -63,9 +63,14 @@ allowlist is:
 | Name | Arguments | Simulated effect |
 | --- | --- | --- |
 | `display.set_expression` | `{"expression":"neutral\|happy\|curious\|thinking\|sleepy"}` | Change in-memory face state |
+| `display.set_text` | `{"text":"Hello"}` | Update simulated display text (1–256 characters) |
+| `display.set_status` | `{"status":"Ready"}` | Update simulated display status (1–64 characters) |
 | `led.set_state` | `{"state":"on\|off"}` | Change in-memory LED state |
 | `device.get_status` | `{}` | Return the two simulated state fields |
 
+Text and status reject control characters and extra fields. Both new display
+commands acknowledge with `ok: true` and an empty `result` object. Telemetry and
+`device.get_status` retain the M3.1 expression/LED schema for compatibility.
 All other names, arguments, and result fields are rejected. No command executes a
 shell, fetches a URL, accesses files, moves a motor, or operates arbitrary pins.
 
@@ -137,19 +142,20 @@ Origin, Host and CSRF checks. Provider configuration remains separate. Pairing
 does not call an AI provider, read memory or experiences, or grant access to
 their contents.
 
-## Heartbeats, limits and recovery
+## Legacy TCP heartbeats, limits and recovery
 
 Every authenticated inbound message has a fresh UUID message ID. Core remembers a
 bounded recent window of 128 IDs per paired device and rejects duplicates. Commands
 also have one-time UUID command IDs; unknown or late results are rejected. The
 simulator sends heartbeats every two seconds by default. Socket reads have a
-five-second timeout; the owner page marks a connection disconnected when it has
+five-second timeout on the legacy TCP transport; the owner page marks a TCP connection disconnected when it has
 not been seen for 15 seconds. Pair approval requests expire after two minutes.
 
-Core caps the registry at 256 identities, pending pairings at 16 and simultaneous
-connections at 16. Device messages are capped at 4096 bytes. These limits bound
-storage and work; they are not a general denial-of-service defense for a LAN
-service, because there is no LAN listener.
+Core caps the registry at 256 identities and pending TCP pairings at 16. Each
+transport caps its simultaneous connections at 16. Device messages are capped
+at 4096 bytes. These limits bound storage and work; they are not a general
+denial-of-service defense. M3.2 adds a separately enabled WebSocket listener,
+whose LAN exposure requires explicit configuration and TLS as described below.
 
 Unsupported versions, malformed frames, spoofed identities, bad proofs, duplicate
 IDs, unknown commands, invalid arguments, missing command correlations and revoked
@@ -165,14 +171,158 @@ currently keeps it only in process memory; if the simulator exits, use a new dev
 identity and explicitly pair again, or retain the running simulator. Revoked
 identities remain tombstoned and cannot be reused.
 
+## M3.2 WebSocket transport
+
+`DeviceGateway.network_transport(**configuration)` creates one optional
+`WebSocketTransport` using that gateway's existing registry, revocation controls,
+and identity proof. Exactly one WebSocket adapter per gateway is supported. Direct
+`WebSocketTransport(gateway, ...)` construction also registers that adapter with
+the gateway; a second adapter is explicitly rejected. All supported adapters
+therefore participate in command routing, exclusive ownership, revocation, and
+shutdown. Construction never binds a socket. The existing Settings
+**Start loopback gateway** button continues to control only the legacy TCP
+listener; it does not enable WebSockets or LAN access.
+
+The adapter defaults to `127.0.0.1:8767`. Start and stop it explicitly on one
+asyncio event loop, owned by the embedding application:
+
+```python
+network = gateway.network_transport(port=8767)
+async with network:  # awaits start(), then stop() even on failure
+    # Keep the application's event loop alive while devices connect.
+    await application_shutdown_event.wait()
+```
+
+Here `gateway` is the existing `DeviceGateway` instance (for an embedding of the
+Settings server, `settings_server.device_gateway`). The application supplies the
+shutdown event. No second registry writer or agent runtime is needed. Use
+`gateway.status()["network"]` or `network.status()` for listener/session state.
+Paired-device connection status includes network sessions. Legacy `enabled`,
+`listen`, and `transport` fields continue to describe the TCP listener.
+
+For LAN exposure, provide an explicit numeric bind address, `allow_lan=True`,
+and an operator-configured `ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)` with a
+certificate/key loaded using `load_cert_chain`. For example:
+
+```python
+network = gateway.network_transport(
+    host="0.0.0.0", port=8767, allow_lan=True, ssl_context=server_context)
+```
+
+Non-loopback binding without both explicit opt-in and TLS fails before listening.
+Clients must trust the server's certificate and verify its hostname/IP. The
+simulator accepts a client `ssl_context` for a private CA; otherwise `wss://`
+uses system trust. TLS supplies server authentication/encryption; the existing
+device HMAC proof supplies device authentication. There is no certificate
+provisioning service, mDNS, discovery, or port forwarding. Web browser Origin
+headers are rejected; this endpoint is for device clients.
+
+### Pair once, authenticate each connection
+
+Pair through the existing owner-approved M3.1 loopback flow. WebSocket does not
+issue credentials or accept pairing requests. Unknown/revoked identities close
+with WebSocket policy code 1008. A paired client sends the same v1 `hello` and
+receives a fresh `hello` challenge. It sends the same `pair_confirm` request ID,
+challenge, and HMAC proof; Core returns `hello` with `status: authenticated`.
+The default authentication deadline is five seconds for the complete protocol
+handshake. Identity changes, replayed IDs, unknown commands/results, duplicate
+results, and unexpected message types close the connection. One active connection
+per identity is allowed across the gateway's TCP and WebSocket sessions.
+
+The application heartbeat is a v1 `heartbeat`, acknowledged by Core. The default
+deadline is fifteen seconds since authentication or the last heartbeat. Status
+traffic and command results do not extend that deadline. WebSocket ping frames
+are not substitutes for application heartbeats. Idle sockets close with code
+1008 during ordinary idle expiry. The deadline covers acknowledgement writes
+as well as reads, so a blocked writer cannot retain ownership indefinitely.
+Writers are serialized, with at most sixteen command operations and one handler
+acknowledgement per session. Expiry releases ownership and fails pending commands
+before closing the connection; a stalled or cancelled in-progress send aborts
+its socket. Reconnection always performs a fresh challenge; it does not reuse a session
+or automatically re-pair. Revocation closes the network session and prevents
+future authentication.
+
+Each WebSocket message passes the same strict v1 validator and 4096-byte bound
+(including the internal LF used by the validator). Binary frames, trailing LF,
+duplicate JSON keys, non-finite numbers, and malformed JSON are rejected.
+Oversized WebSocket messages may close with library code 1009. Compression is
+disabled; received-frame queues are bounded to four. At most sixteen established
+connections and sixteen outstanding commands per session are allowed.
+
+Send a display update on the event loop with:
+
+```python
+result = await network.send_command("desk-sim", "display.set_text", {"text": "Hello"})
+result = await network.send_command("desk-sim", "display.set_status", {"status": "Ready"})
+```
+
+Existing synchronous callers, including the Settings command endpoint, can use
+`gateway.send_command(...)` for either TCP or authenticated WebSocket devices.
+The gateway captures the owning session under its lock and releases the lock
+before dispatch. WebSocket calls run on the adapter's owning event loop; their
+deadline includes time spent waiting to be dispatched, and a queued call cannot
+move to a replacement session after reconnect. The synchronous gateway API keeps
+its existing maximum five-second command timeout.
+
+Do not call the synchronous command API on the WebSocket adapter's own event
+loop: it raises `DeviceError` promptly to prevent deadlock. Use
+`await network.send_command(...)` there, or use a worker thread when invoking the
+synchronous API from async code. Listener start, stop, and async commands belong
+to the same event loop for the adapter's lifetime; cross-loop calls are rejected.
+
+The returned result is correlated to that device/session's command ID. The
+default command deadline is five seconds; disconnection fails pending commands
+immediately. Timeout/cancellation removes pending command state. A result arriving
+after its command expired is rejected and the session closes, rather than being
+applied to a later command. No commands are persisted or replayed after reconnect.
+
+`await network.stop()` closes authenticated and unauthenticated connections,
+waits for all handlers, and releases the listener. It is idempotent and supports
+later restart on the owning event loop. Listener status is published as an
+immutable tuple under the gateway lock; cross-thread status reads never inspect
+live listener sockets. Synchronous `gateway.stop()` also requests network closure using
+the event loop's thread-safe callback; async owners must still await
+`network.stop()` before closing the event loop to guarantee completed cleanup.
+
+### Simulator
+
+`WebSocketSimulatedDevice` extends the existing simulator and shares its command
+execution logic. Use the M3.1 simulator's in-memory credential after pairing:
+
+```python
+device = WebSocketSimulatedDevice("desk-sim", uri="ws://127.0.0.1:8767")
+device.credential = paired_tcp_simulator.credential
+await device.run_forever()  # receives commands, sends heartbeats, reconnects
+```
+
+Disconnect the paired TCP simulator before connecting through WebSocket. The
+CLI can perform the same owner-approved pairing, then switch transport:
+
+```sh
+python -m device_simulator --device-id desk-sim --websocket-uri ws://127.0.0.1:8767
+```
+
+The embedding application must explicitly start the network adapter first.
+`run_forever` reconnects with bounded exponential delay (1–10 seconds); cancellation
+or `await device.stop()` closes its socket and stops its reconnect loop. Credentials
+remain in memory only. No ESP32 firmware, audio, industrial integration, or changes
+to reasoning/memory are included. Older v1 peers can use the original command
+subset; send the new display commands only to implementations supporting M3.2.
+
 ## Future ESP32 considerations and limitations
 
+- Persistent ESP32 identity, protected credential storage, initial provisioning,
+  and recovery belong to the future hardware milestone. Firmware must retain its
+  identity and credential across reboot and durably store them before confirming
+  pairing. A reboot reconnects using the existing credential and fresh challenge;
+  it must not silently re-pair or resurrect a revoked identity. No firmware or
+  hardware provisioning implementation is added in M3.2.
 - Firmware must validate the same versioned schema and bounds before acting.
 - Use a separately designed audio data channel; do not place microphone or audio
   streams in these JSON command frames.
-- Add authenticated encryption and mutual device/server identity before any LAN
-  transport. A pairing token or device ID alone does not secure an untrusted
-  network.
+- For LAN transport use M3.2 TLS with trusted server identity plus per-device
+  challenge proofs. Keep initial credential provisioning on the owner-approved
+  loopback flow; a device ID alone never authenticates.
 - Provision and rotate per-device credentials through an explicit owner flow.
   Protect device-side credential storage and consider recovery from physical
   reset without allowing a revoked identity to silently return.

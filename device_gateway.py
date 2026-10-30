@@ -216,6 +216,7 @@ class DeviceGateway:
         self._slots = BoundedSemaphore(MAX_CONNECTIONS)
         self._server = None
         self._thread = None
+        self._network_transport = None
 
     @property
     def running(self):
@@ -276,7 +277,19 @@ class DeviceGateway:
             self._thread.start()
             return server.server_address
 
+    def network_transport(self, **configuration):
+        """Configure an opt-in WebSocket adapter; await its start/stop methods."""
+        from device_transport import WebSocketTransport
+        with self._lock:
+            if self._network_transport is None:
+                self._network_transport = WebSocketTransport(self, **configuration)
+            elif configuration:
+                raise DeviceError("Network transport is already configured.")
+            return self._network_transport
+
     def stop(self):
+        if self._network_transport is not None:
+            self._network_transport.request_stop()
         with self._lock:
             server, thread = self._server, self._thread
             if server is None:
@@ -303,13 +316,19 @@ class DeviceGateway:
         now = monotonic()
         with self._lock:
             sessions = dict(self._sessions)
+            network = self._network_transport
+            network_ids = frozenset(network._sessions) if network is not None else frozenset()
+            if network is not None:
+                sessions.update(network._sessions)
             pending = list(self._pending.values())
             running = self._server is not None
             address = None if self._server is None else self._server.server_address
         paired = []
         for record in self.registry.public_devices():
             session = sessions.get(record["device_id"])
-            connected = bool(session and now - session.last_seen <= HEARTBEAT_TIMEOUT)
+            timeout = (network.heartbeat_timeout if network is not None
+                       and record["device_id"] in network_ids else HEARTBEAT_TIMEOUT)
+            connected = bool(session and now - session.last_seen <= timeout)
             paired.append({"device_id": record["device_id"], "name": record["name"],
                            "status": record["status"],
                            "connection": "connected" if connected and record["status"] == "paired" else "disconnected",
@@ -319,7 +338,8 @@ class DeviceGateway:
                     "name": item.name, "state": "awaiting_confirmation" if item.approved else "pending"}
                    for item in pending if monotonic() - item.created <= PAIR_TIMEOUT]
         return {"enabled": running, "listen": f"{address[0]}:{address[1]}" if address else None,
-                "transport": "loopback_unencrypted", "paired": paired, "pending": waiting}
+                "transport": "loopback_unencrypted", "paired": paired, "pending": waiting,
+                "network": network.status() if network else {"enabled": False}}
 
     def approve_pairing(self, request_id):
         with self._lock:
@@ -360,6 +380,8 @@ class DeviceGateway:
 
     def revoke_device(self, device_id):
         self.registry.revoke(device_id)
+        if self._network_transport is not None:
+            self._network_transport.request_disconnect(device_id)
         with self._lock:
             session = self._sessions.pop(device_id, None)
             pending = [item for item in self._pending.values() if item.device_id == device_id]
@@ -392,6 +414,11 @@ class DeviceGateway:
             raise ValueError("Command timeout must be between 0 and 5 seconds.")
         with self._lock:
             session = self._sessions.get(device_id)
+            network = self._network_transport
+            network_session = network._sessions.get(device_id) if network is not None else None
+        if session is None and network_session is not None:
+            return network.send_command_sync(device_id, name, arguments, timeout=timeout,
+                                             session=network_session)
         if session is None or monotonic() - session.last_seen > HEARTBEAT_TIMEOUT:
             raise DeviceError("Paired device is not connected.")
         event = Event()
@@ -432,10 +459,13 @@ class DeviceGateway:
             if session is None:
                 return
             with self._lock:
-                if device_id in self._sessions:
+                if (device_id in self._sessions or (self._network_transport is not None
+                        and device_id in self._network_transport._sessions)):
                     _send_error(sock, device_id, "already_connected", "Device is already connected.")
                     return
                 self._sessions[device_id] = session
+            _send(sock, {"type": "hello", "protocol_version": protocol.PROTOCOL_VERSION,
+                         "message_id": protocol.new_id(), "device_id": device_id, "status": "authenticated"})
             self._receive_loop(sock, reader, session)
         except (ProtocolError, DeviceError, OSError, TimeoutError, ValueError):
             pass
@@ -478,8 +508,6 @@ class DeviceGateway:
         with self._lock:
             self._pending.pop(request_id, None)
         sock.settimeout(SOCKET_TIMEOUT)
-        _send(sock, {"type": "hello", "protocol_version": protocol.PROTOCOL_VERSION,
-                     "message_id": protocol.new_id(), "device_id": device_id, "status": "authenticated"})
         return _Session(device_id, sock)
 
     def _authenticate(self, sock, reader, record):
@@ -499,8 +527,6 @@ class DeviceGateway:
         if not hmac.compare_digest(expected, confirmation["proof"]):
             raise ProtocolError("Authentication proof did not match.")
         self.registry.record_message(device_id, confirmation["message_id"])
-        _send(sock, {"type": "hello", "protocol_version": protocol.PROTOCOL_VERSION,
-                     "message_id": protocol.new_id(), "device_id": device_id, "status": "authenticated"})
         return _Session(device_id, sock)
 
     def _receive_loop(self, sock, reader, session):
