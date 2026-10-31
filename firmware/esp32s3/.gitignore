@@ -1,0 +1,10 @@
+/build/
+/sdkconfig
+/sdkconfig.old
+/managed_components/
+__pycache__/
+
+# Generated firmware images and linker outputs; factory backups stay external.
+*.bin
+*.elf
+*.map

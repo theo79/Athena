@@ -170,3 +170,17 @@ packaging instructions and checks are in [BUILD.md](BUILD.md).
 - [Memory lifecycle](MEMORY_LIFECYCLE.md)
 - [Windows packaging](BUILD.md)
 - [Apache License 2.0](LICENSE)
+
+## ESP32-S3 hardware foundation
+
+M3.3 Phase A is complete: standalone ESP-IDF v6.1 firmware v0.1.0 for the
+Waveshare ESP32-S3-LCD-1.69 non-touch V2 passed physical hardware acceptance.
+It provides the official static Athena screen, calibrated battery voltage logging,
+battery power hold/off, and USB software standby with a fresh PWR press to wake.
+The existing Python/M3.2 host remains independent and unchanged.
+
+See [firmware build and recovery instructions](firmware/esp32s3/README.md) and the
+[M3.3 Phase A completion report](M3_3_PHASE_A_COMPLETION_REPORT.md).
+Current GitHub Actions test the Python host; they do not build/test this firmware.
+Development is paused until explicitly resumed. Planned Phase B: Wi-Fi,
+persistent identity, provisioning and authenticated M3.2 gateway communication.
